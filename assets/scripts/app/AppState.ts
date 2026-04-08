@@ -8,7 +8,7 @@ export interface RootState {
 const repository = new SaveRepository();
 
 let appState: RootState = {
-  save: repository.createDefault()
+  save: repository.load()
 };
 
 export function createAppState(): RootState {
@@ -39,5 +39,21 @@ export function getAppState(): RootState {
 
 export function setAppState(nextState: RootState): RootState {
   appState = nextState;
+  repository.save(appState.save);
+  return appState;
+}
+
+export function loadPersistedAppState(): RootState {
+  appState = {
+    save: repository.load()
+  };
+  return appState;
+}
+
+export function resetAppState(): RootState {
+  repository.clear();
+  appState = {
+    save: repository.createDefault()
+  };
   return appState;
 }

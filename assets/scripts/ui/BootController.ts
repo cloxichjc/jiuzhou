@@ -1,13 +1,13 @@
 import { _decorator, Component } from 'cc';
 import { appRouter } from '../app/AppRouter';
-import { createAppState, setAppState } from '../app/AppState';
+import { loadPersistedAppState, setAppState } from '../app/AppState';
 
 const { ccclass } = _decorator;
 
 @ccclass('BootController')
 export class BootController extends Component {
   onLoad(): void {
-    setAppState(createAppState());
+    setAppState(loadPersistedAppState());
     appRouter.go('MainMenu');
   }
 }

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { appRouter } from '../../assets/scripts/app/AppRouter';
-import { createAppState, selectHero, setAppState, clearStage } from '../../assets/scripts/app/AppState';
+import { createAppState, selectHero, setAppState, clearStage, resetAppState } from '../../assets/scripts/app/AppState';
 import { BootController } from '../../assets/scripts/ui/BootController';
 import { HeroSelectController } from '../../assets/scripts/ui/HeroSelectController';
 import { ChapterController } from '../../assets/scripts/ui/ChapterController';
 import { ResultController } from '../../assets/scripts/ui/ResultController';
+import { MainMenuController } from '../../assets/scripts/ui/MainMenuController';
 
 describe('UI controller view models', () => {
   it('boot resets state and routes to main menu', () => {
@@ -14,6 +15,15 @@ describe('UI controller view models', () => {
     boot.onLoad();
 
     expect(appRouter.currentScene).toBe('MainMenu');
+  });
+
+  it('continue game routes to hero select when no save exists', () => {
+    resetAppState();
+    const menu = new MainMenuController();
+
+    menu.continueGame();
+
+    expect(appRouter.currentScene).toBe('HeroSelect');
   });
 
   it('hero select exposes three protagonist cards', () => {
