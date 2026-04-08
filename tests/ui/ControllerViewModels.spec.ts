@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { appRouter } from '../../assets/scripts/app/AppRouter';
-import { createAppState, selectHero, setAppState, clearStage, resetAppState } from '../../assets/scripts/app/AppState';
+import { createAppState, selectHero, setAppState, clearStage, resetAppState, getAppState } from '../../assets/scripts/app/AppState';
 import { BootController } from '../../assets/scripts/ui/BootController';
 import { HeroSelectController } from '../../assets/scripts/ui/HeroSelectController';
 import { ChapterController } from '../../assets/scripts/ui/ChapterController';
 import { ResultController } from '../../assets/scripts/ui/ResultController';
 import { MainMenuController } from '../../assets/scripts/ui/MainMenuController';
+import { BattleController } from '../../assets/scripts/ui/BattleController';
 
 describe('UI controller view models', () => {
   it('boot resets state and routes to main menu', () => {
@@ -56,5 +57,31 @@ describe('UI controller view models', () => {
 
     expect(controller.getTitle()).toBe('战斗胜利');
     expect(controller.getSummary()).toContain('第一章已完成');
+  });
+
+  it('battle keeps the hero skill limited to once across all waves and clears the stage', () => {
+    let state = createAppState();
+    state = selectHero(state, 'asu');
+    setAppState(state);
+    appRouter.go('Battle', { stageId: 'stage-5' });
+
+    const controller = new BattleController();
+    controller.onLoad();
+    controller.useSkill();
+
+    expect(controller.skillUsed).toBe(true);
+
+    controller.battleState.phase = 'won';
+    controller.update(0);
+
+    expect(controller.waveIndex).toBe(1);
+    expect(controller.skillUsed).toBe(true);
+
+    controller.battleState.phase = 'won';
+    controller.update(0);
+
+    expect(appRouter.currentScene).toBe('Result');
+    expect(appRouter.payload.result).toBe('won');
+    expect(getAppState().save.clearedStageIds).toContain('stage-5');
   });
 });

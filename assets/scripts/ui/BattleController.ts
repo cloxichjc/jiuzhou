@@ -90,7 +90,6 @@ export class BattleController extends Component {
           allies: this.battleState.allies,
           enemies: buildEnemies(this.currentStageId, this.waveIndex)
         });
-        this.skillUsed = false;
         return;
       }
 
