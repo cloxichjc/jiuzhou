@@ -1,0 +1,5 @@
+[
+  { "id": "asu", "name": "阿苏勒", "role": "support", "faction": "north", "skillId": "wolfBlessing" },
+  { "id": "jiye", "name": "姬野", "role": "fighter", "faction": "east", "skillId": "tigerCharge" },
+  { "id": "yuran", "name": "羽然", "role": "skirmisher", "faction": "east", "skillId": "featherBounce" }
+]

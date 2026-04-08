@@ -1,0 +1,42 @@
+[
+  {
+    "id": "stage-1",
+    "title": "乱世来客",
+    "storyBefore": "你第一次踏进乱世，身边只有风声和传言。",
+    "storyAfter": "第一场战斗结束，你知道九州不再只是故事。",
+    "waves": [{ "id": "wave-1", "enemies": [{ "unitId": "bandit-melee", "slot": 0 }] }]
+  },
+  {
+    "id": "stage-2",
+    "title": "南淮初会",
+    "storyBefore": "命运让你看见了第一个同行者。",
+    "storyAfter": "并肩之后，你们不再只是路人。",
+    "unlockHeroId": "jiye",
+    "waves": [{ "id": "wave-1", "enemies": [{ "unitId": "bandit-ranged", "slot": 2 }] }]
+  },
+  {
+    "id": "stage-3",
+    "title": "街巷风波",
+    "storyBefore": "街巷里的混乱逼着你们第一次配合。",
+    "storyAfter": "你开始明白，信任不是说出来的。",
+    "unlockHeroId": "yuran",
+    "waves": [{ "id": "wave-1", "enemies": [{ "unitId": "bandit-shield", "slot": 1 }] }]
+  },
+  {
+    "id": "stage-4",
+    "title": "并肩破敌",
+    "storyBefore": "三人终于同场，命运第一次变得清晰。",
+    "storyAfter": "羁绊开始成形。",
+    "waves": [{ "id": "wave-1", "enemies": [{ "unitId": "elite-guard", "slot": 0 }] }]
+  },
+  {
+    "id": "stage-5",
+    "title": "一生之盟",
+    "storyBefore": "你们知道，眼前这一战只是九州的开始。",
+    "storyAfter": "第一章落幕，更大的世界正在打开。",
+    "waves": [
+      { "id": "wave-1", "enemies": [{ "unitId": "bandit-melee", "slot": 0 }, { "unitId": "bandit-ranged", "slot": 2 }] },
+      { "id": "wave-2", "enemies": [{ "unitId": "captain", "slot": 1 }] }
+    ]
+  }
+]

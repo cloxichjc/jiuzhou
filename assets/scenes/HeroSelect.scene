@@ -1,0 +1,8 @@
+{
+  "scene": "HeroSelect",
+  "components": [
+    {
+      "type": "HeroSelectController"
+    }
+  ]
+}

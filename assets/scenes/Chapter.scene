@@ -1,0 +1,8 @@
+{
+  "scene": "Chapter",
+  "components": [
+    {
+      "type": "ChapterController"
+    }
+  ]
+}

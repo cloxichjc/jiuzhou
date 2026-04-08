@@ -1,0 +1,8 @@
+{
+  "scene": "Result",
+  "components": [
+    {
+      "type": "ResultController"
+    }
+  ]
+}

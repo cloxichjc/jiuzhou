@@ -1,0 +1,8 @@
+{
+  "scene": "Battle",
+  "components": [
+    {
+      "type": "BattleController"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "scene": "Boot",
+  "components": [
+    {
+      "type": "BootController"
+    }
+  ]
+}

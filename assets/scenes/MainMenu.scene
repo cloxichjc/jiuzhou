@@ -1,0 +1,8 @@
+{
+  "scene": "MainMenu",
+  "components": [
+    {
+      "type": "MainMenuController"
+    }
+  ]
+}
