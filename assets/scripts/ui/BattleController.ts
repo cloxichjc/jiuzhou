@@ -14,6 +14,13 @@ const heroSkillLabels: Record<string, string> = {
   featherBounce: '风羽回旋'
 };
 
+export interface BattleUnitView {
+  id: string;
+  hp: number;
+  slot: number;
+  alive: boolean;
+}
+
 function buildAllies(heroIds: string[]): BattleUnit[] {
   const base: Record<string, BattleUnit> = {
     asu: { id: 'asu', hp: 100, attack: 10, slot: 0 },
@@ -69,14 +76,40 @@ export class BattleController extends Component {
     return getStageById(this.currentStageId)?.storyBefore ?? '';
   }
 
+  getStageTitle(): string {
+    return getStageById(this.currentStageId)?.title ?? '未知关卡';
+  }
+
   getSkillLabel(): string {
     return heroSkillLabels[this.selectedSkillId] ?? '英雄技能';
+  }
+
+  canUseSkill(): boolean {
+    return !this.skillUsed && this.battleState.phase !== 'won' && this.battleState.phase !== 'lost';
   }
 
   getWaveLabel(): string {
     const stage = getStageById(this.currentStageId);
     const total = stage?.waves.length ?? 1;
     return `第 ${this.waveIndex + 1} / ${total} 波`;
+  }
+
+  getAlliesView(): BattleUnitView[] {
+    return this.battleState.allies.map((unit) => ({
+      id: unit.id,
+      hp: unit.hp,
+      slot: unit.slot,
+      alive: unit.hp > 0
+    }));
+  }
+
+  getEnemiesView(): BattleUnitView[] {
+    return this.battleState.enemies.map((unit) => ({
+      id: unit.id,
+      hp: unit.hp,
+      slot: unit.slot,
+      alive: unit.hp > 0
+    }));
   }
 
   update(deltaTime: number): void {

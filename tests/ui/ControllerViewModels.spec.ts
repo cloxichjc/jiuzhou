@@ -67,9 +67,17 @@ describe('UI controller view models', () => {
 
     const controller = new BattleController();
     controller.onLoad();
+
+    expect(controller.getStageTitle()).toBe('一生之盟');
+    expect(controller.getWaveLabel()).toBe('第 1 / 2 波');
+    expect(controller.getAlliesView().length).toBeGreaterThan(0);
+    expect(controller.getEnemiesView().length).toBeGreaterThan(0);
+    expect(controller.canUseSkill()).toBe(true);
+
     controller.useSkill();
 
     expect(controller.skillUsed).toBe(true);
+    expect(controller.canUseSkill()).toBe(false);
 
     controller.battleState.phase = 'won';
     controller.update(0);
