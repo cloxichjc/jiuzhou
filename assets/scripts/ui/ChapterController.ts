@@ -18,6 +18,16 @@ export interface StageCardView {
 
 @ccclass('ChapterController')
 export class ChapterController extends Component {
+  getScreenTitle(): string {
+    return '第一章：一生之盟';
+  }
+
+  getProgressText(): string {
+    const save = getAppState().save;
+    const stages = loadStages();
+    return `已通关 ${save.clearedStageIds.length} / ${stages.length} 关`;
+  }
+
   getStageCards(): StageCardView[] {
     const stages = loadStages();
 

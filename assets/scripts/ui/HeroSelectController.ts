@@ -39,6 +39,10 @@ export class HeroSelectController extends Component {
     }));
   }
 
+  getScreenTitle(): string {
+    return '选择你的主角';
+  }
+
   chooseHero(heroId: string): void {
     const state = getAppState();
     setAppState(selectHero(state, heroId));

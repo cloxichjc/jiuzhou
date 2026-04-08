@@ -10,6 +10,10 @@ export class ResultController extends Component {
     return appRouter.payload.result === 'won' ? '战斗胜利' : '战斗失败';
   }
 
+  getPrimaryButtonLabel(): string {
+    return appRouter.payload.result === 'won' ? '返回章节' : '再次尝试';
+  }
+
   getSummary(): string {
     const stageId = appRouter.payload.stageId;
     const stage = stageId ? getStageById(stageId) : undefined;
@@ -29,6 +33,11 @@ export class ResultController extends Component {
   }
 
   next(): void {
+    if (appRouter.payload.result === 'lost' && appRouter.payload.stageId) {
+      appRouter.go('Battle', { stageId: appRouter.payload.stageId });
+      return;
+    }
+
     appRouter.go('Chapter');
   }
 }

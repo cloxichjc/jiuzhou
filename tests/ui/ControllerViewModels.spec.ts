@@ -22,15 +22,29 @@ describe('UI controller view models', () => {
     resetAppState();
     const menu = new MainMenuController();
 
+    expect(menu.canContinue()).toBe(false);
     menu.continueGame();
 
     expect(appRouter.currentScene).toBe('HeroSelect');
+  });
+
+  it('main menu exposes title and can continue when save exists', () => {
+    let state = createAppState();
+    state = selectHero(state, 'asu');
+    setAppState(state);
+
+    const menu = new MainMenuController();
+
+    expect(menu.getTitle()).toBe('九州·缥缈录');
+    expect(menu.getSubtitle()).toContain('MVP');
+    expect(menu.canContinue()).toBe(true);
   });
 
   it('hero select exposes three protagonist cards', () => {
     setAppState(createAppState());
     const controller = new HeroSelectController();
 
+    expect(controller.getScreenTitle()).toBe('选择你的主角');
     const cards = controller.getHeroCards();
 
     expect(cards).toHaveLength(3);
@@ -44,6 +58,8 @@ describe('UI controller view models', () => {
     setAppState(state);
 
     const controller = new ChapterController();
+    expect(controller.getScreenTitle()).toContain('第一章');
+    expect(controller.getProgressText()).toBe('已通关 1 / 5 关');
     const cards = controller.getStageCards();
 
     expect(cards.find((card) => card.id === 'stage-1')?.status).toBe('cleared');
@@ -56,7 +72,19 @@ describe('UI controller view models', () => {
     appRouter.go('Result', { stageId: 'stage-5', result: 'won' });
 
     expect(controller.getTitle()).toBe('战斗胜利');
+    expect(controller.getPrimaryButtonLabel()).toBe('返回章节');
     expect(controller.getSummary()).toContain('第一章已完成');
+  });
+
+  it('result primary action retries the stage on failure', () => {
+    const controller = new ResultController();
+    appRouter.go('Result', { stageId: 'stage-3', result: 'lost' });
+
+    expect(controller.getPrimaryButtonLabel()).toBe('再次尝试');
+    controller.next();
+
+    expect(appRouter.currentScene).toBe('Battle');
+    expect(appRouter.payload.stageId).toBe('stage-3');
   });
 
   it('battle keeps the hero skill limited to once across all waves and clears the stage', () => {
