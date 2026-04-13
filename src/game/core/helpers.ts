@@ -1,6 +1,6 @@
 import { totems } from '../data/totems';
 import { units } from '../data/units';
-import type { BenchUnit, TotemDefinition, UnitDefinition } from '../types';
+import type { BenchUnit, BoardSlot, TotemDefinition, UnitDefinition } from '../types';
 
 let benchCounter = 0;
 
@@ -11,6 +11,18 @@ export function createBenchUnit(unitId: string, star: 1 | 2 | 3 = 1): BenchUnit 
     unitId,
     star,
   };
+}
+
+export function createBoardSlots(slotCount: number): BoardSlot[] {
+  return Array.from({ length: slotCount }, () => null);
+}
+
+export function getBenchUnitOrThrow(bench: BenchUnit[], instanceId: string): BenchUnit {
+  const unit = bench.find((entry) => entry.instanceId === instanceId);
+  if (!unit) {
+    throw new Error(`Unknown bench unit instance: ${instanceId}`);
+  }
+  return unit;
 }
 
 export function getUnitDefinitionOrThrow(unitId: string): UnitDefinition {

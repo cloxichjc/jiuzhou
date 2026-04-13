@@ -53,6 +53,8 @@ export interface BenchUnit {
   star: 1 | 2 | 3;
 }
 
+export type BoardSlot = string | null;
+
 export interface RewardChoice {
   kind: RewardKind;
   id: string;
@@ -80,6 +82,7 @@ export interface RunState {
   usedPopulation: number;
   waveNumber: number;
   bench: BenchUnit[];
+  boardSlots: BoardSlot[];
   unlockedUnitIds: string[];
   ownedTotemIds: string[];
 }

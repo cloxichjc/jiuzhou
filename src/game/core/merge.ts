@@ -4,6 +4,7 @@ import type { BenchUnit } from '../types';
 export interface MergeResult {
   merged: boolean;
   mergedUnit?: BenchUnit;
+  consumedIds?: string[];
   bench: BenchUnit[];
 }
 
@@ -35,6 +36,7 @@ export function mergeBenchUnits(bench: BenchUnit[]): MergeResult {
     return {
       merged: true,
       mergedUnit,
+      consumedIds: Array.from(removableIds),
       bench: nextBench,
     };
   }

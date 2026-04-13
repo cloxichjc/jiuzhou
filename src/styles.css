@@ -19,6 +19,7 @@ body {
   display: grid;
   place-items: center;
   background:
+    radial-gradient(circle at 50% 10%, rgba(241, 222, 178, 0.16), transparent 26%),
     linear-gradient(180deg, rgba(45, 29, 19, 0.96), rgba(16, 12, 9, 0.98)),
     radial-gradient(circle at center, rgba(255, 230, 182, 0.1), transparent 46%);
 }

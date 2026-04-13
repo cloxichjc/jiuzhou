@@ -4,7 +4,21 @@ export function buildUnitCardLines(unitId: string, star = 1): string[] {
   const unit = getUnitDefinitionOrThrow(unitId);
   return [
     `${unit.name} · ${star}星`,
-    `攻击 ${unit.attack} / 生命 ${unit.health}`,
+    `攻击 ${Math.round(unit.attack * star)} / 生命 ${Math.round(unit.health * (1 + (star - 1) * 0.7))}`,
     `${unit.skillName}：${unit.skillText}`,
+    flavorText(unitId),
   ];
+}
+
+function flavorText(unitId: string): string {
+  if (unitId === 'axe-warrior') {
+    return '北陆最先迎敌的一排战骨。';
+  }
+  if (unitId === 'frost-shaman') {
+    return '以霜语祭骨，延缓敌势。';
+  }
+  if (unitId === 'wolf-rider') {
+    return '以狼影撕开敌阵侧翼。';
+  }
+  return '熟悉殇州风雪与荒原追猎。';
 }

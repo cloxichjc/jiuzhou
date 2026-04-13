@@ -1,260 +1,475 @@
 import Phaser from 'phaser';
-import { waves } from '../data/waves';
 import { simulateBattle } from '../core/battle';
-import { applyRewardChoice, advanceAfterVictory, initialRunState } from '../core/run-state';
+import { autoMergeRunState, applyRewardChoice, assignBoardSlot, clearBoardSlot, getDeployedUnits, advanceAfterVictory, initialRunState } from '../core/run-state';
+import { createBenchUnit, getBenchUnitOrThrow, getUnitDefinitionOrThrow } from '../core/helpers';
+import { chapter } from '../data/chapter';
+import { waves } from '../data/waves';
+import { buildBenchCardModel } from '../ui/bench';
 import { buildUnitCardLines } from '../ui/card-modal';
-import { createBenchPanel, renderBenchUnits } from '../ui/bench';
 import { createHud, updateHud, type HudRefs } from '../ui/hud';
 import { buildRewardPanelModel } from '../ui/reward-panel';
 import type { BenchUnit, RewardChoice, RunState } from '../types';
 
+interface SlotAnchor {
+  x: number;
+  y: number;
+}
+
+const BOARD_SLOT_POSITIONS: SlotAnchor[] = [
+  { x: 118, y: 432 },
+  { x: 196, y: 386 },
+  { x: 274, y: 432 },
+];
+
+const RECRUIT_COST = 15;
+
 export class JiuzhouBattleScene extends Phaser.Scene {
   private state: RunState = structuredClone(initialRunState);
   private hud?: HudRefs;
-  private benchPanel?: Phaser.GameObjects.Container;
-  private startButton?: Phaser.GameObjects.Container;
+  private battleLayer?: Phaser.GameObjects.Container;
+  private benchLayer?: Phaser.GameObjects.Container;
+  private overlayLayer?: Phaser.GameObjects.Container;
   private battleInfo?: Phaser.GameObjects.Text;
   private enemyInfo?: Phaser.GameObjects.Text;
-  private battleLayer?: Phaser.GameObjects.Container;
-  private overlayLayer?: Phaser.GameObjects.Container;
+  private recruitButton?: Phaser.GameObjects.Container;
+  private startButton?: Phaser.GameObjects.Container;
+  private recruitCursor = 0;
 
-  constructor() {
-    super('JiuzhouBattleScene');
+  preload(): void {
+    this.load.image('ground', '/art/frost-ground.svg');
+    this.load.image('panel-header', '/art/panel-header.svg');
+    this.load.image('panel-bench', '/art/panel-bench.svg');
+    this.load.image('card-unit', '/art/card-unit.svg');
+    this.load.image('button-lacquer', '/art/button-lacquer.svg');
+    this.load.image('slot-stone', '/art/slot-stone.svg');
+    this.load.image('unit-axe-warrior', '/art/unit-axe-warrior.svg');
+    this.load.image('unit-frost-shaman', '/art/unit-frost-shaman.svg');
+    this.load.image('unit-wolf-rider', '/art/unit-wolf-rider.svg');
+    this.load.image('unit-wastes-hunter', '/art/unit-wastes-hunter.svg');
+    this.load.image('totem-war-drum', '/art/totem-war-drum.svg');
+    this.load.image('totem-wolf-spirit', '/art/totem-wolf-spirit.svg');
+    this.load.image('totem-frost-bone', '/art/totem-frost-bone.svg');
   }
 
   create(): void {
+    this.input.setTopOnly(false);
     this.drawBackdrop();
+    this.battleLayer = this.add.container(0, 0);
+    this.benchLayer = this.add.container(0, 0);
     this.hud = createHud(this, this.state);
-    this.createBattlefield();
-    this.benchPanel = createBenchPanel(this);
-    this.createStartButton();
-    this.refreshScene();
+    this.createInfoText();
+    this.createButtons();
+    this.refreshScene('拖拽战团卡牌到战场圆阵上阵。');
   }
 
   private drawBackdrop(): void {
-    this.add.rectangle(195, 422, 390, 844, 0xefe0c0).setStrokeStyle(0);
-    this.add.rectangle(195, 312, 334, 472, 0xd6c59d).setStrokeStyle(3, 0x6d5231);
-    this.add.ellipse(84, 184, 54, 30, 0xb0a173, 0.55);
-    this.add.ellipse(286, 250, 78, 42, 0xb7aa7b, 0.45);
-    this.add.ellipse(214, 338, 92, 46, 0xcec49b, 0.55);
-    this.add.text(248, 122, '荒原试炼', {
-      color: '#64492f',
+    this.add.image(195, 422, 'ground').setDisplaySize(390, 844);
+    this.add.image(195, 104, 'panel-header').setDisplaySize(360, 154);
+    this.add.rectangle(195, 368, 332, 444, 0x000000, 0.06).setStrokeStyle(4, 0x725436, 0.65);
+    this.add.image(195, 745, 'panel-bench').setDisplaySize(360, 168);
+    this.add.text(270, 138, '殇州试炼', {
+      color: '#765635',
       fontFamily: 'Microsoft YaHei',
       fontSize: '18px',
+      fontStyle: 'bold',
     });
   }
 
-  private createBattlefield(): void {
-    this.battleLayer = this.add.container(0, 0);
-    this.enemyInfo = this.add.text(34, 568, '', {
+  private createInfoText(): void {
+    this.enemyInfo = this.add.text(36, 578, '', {
       color: '#5c4127',
       fontFamily: 'Microsoft YaHei',
       fontSize: '18px',
-    });
-    this.battleInfo = this.add.text(34, 598, '', {
-      color: '#73462d',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '17px',
-      wordWrap: { width: 320 },
-    });
-  }
-
-  private createStartButton(): void {
-    const container = this.add.container(262, 744);
-    const button = this.add.rectangle(0, 0, 92, 56, 0xa74332);
-    button.setStrokeStyle(2, 0x67301e);
-    const label = this.add.text(-26, -16, '开始', {
-      color: '#fff5ea',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '28px',
       fontStyle: 'bold',
     });
-    button.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.runBattle());
-    container.add([button, label]);
-    container.setDepth(20);
-    this.startButton = container;
+    this.battleInfo = this.add.text(36, 608, '', {
+      color: '#6c4d2c',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '15px',
+      wordWrap: { width: 318 },
+    });
   }
 
-  private refreshScene(): void {
-    this.renderBattlefieldUnits();
+  private createButtons(): void {
+    this.recruitButton = this.buildButton(86, 791, 84, 44, '招募', '#fff5ea', () => this.recruitUnit());
+    this.startButton = this.buildButton(300, 788, 114, 54, '开始', '#fff5ea', () => this.runBattle());
+    this.recruitButton.setDepth(14);
+    this.startButton.setDepth(14);
+  }
+
+  private buildButton(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    label: string,
+    textColor: string,
+    onClick: () => void
+  ): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y);
+    const skin = this.add.image(0, 0, 'button-lacquer').setDisplaySize(width, height);
+    const text = this.add.text(-22, -14, label, {
+      color: textColor,
+      fontFamily: 'Microsoft YaHei',
+      fontSize: label.length > 2 ? '22px' : '28px',
+      fontStyle: 'bold',
+    });
+    skin.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+    container.add([skin, text]);
+    return container;
+  }
+
+  private refreshScene(message?: string): void {
+    this.refreshHud();
+    this.refreshBattlefield();
     this.refreshBench();
-    this.refreshWaveInfo();
+    this.refreshWaveInfo(message);
+    this.refreshButtonState();
+  }
+
+  private refreshHud(): void {
     if (this.hud) {
       updateHud(this.hud, this.state);
     }
   }
 
-  private refreshBench(): void {
-    this.benchPanel?.destroy(true);
-    this.benchPanel = createBenchPanel(this);
-    this.benchPanel.setDepth(10);
-    renderBenchUnits(this, this.benchPanel, this.state.bench, (unit) => this.showCard(unit));
-    this.startButton?.setDepth(20);
-  }
-
-  private refreshWaveInfo(): void {
+  private refreshWaveInfo(message?: string): void {
     const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
-    const nextTitle = wave?.title ?? '试炼已完成';
-    this.enemyInfo?.setText(`当前目标：${nextTitle}`);
+    this.enemyInfo?.setText(`当前目标：${wave?.title ?? '试炼凯旋'}`);
+    if (message) {
+      this.battleInfo?.setText(message);
+    } else if (!this.battleInfo?.text) {
+      this.battleInfo?.setText(chapter.backdrop);
+    }
   }
 
-  private renderBattlefieldUnits(): void {
+  private refreshBattlefield(): void {
     this.battleLayer?.removeAll(true);
     if (!this.battleLayer) {
       return;
     }
 
-    const activeUnits = this.state.bench.slice(0, this.state.population);
-    activeUnits.forEach((unit, index) => {
-      const x = 110 + index * 84;
-      const y = 410 + (index % 2) * 36;
-      const marker = this.add.circle(x, y, 22, 0x58724f);
-      const label = this.add.text(x - 24, y - 10, buildUnitCardLines(unit.unitId, unit.star)[0], {
-        color: '#fff7ed',
+    const boardFrame = this.add.rectangle(195, 368, 316, 408, 0xf3ead3, 0.08);
+    boardFrame.setStrokeStyle(3, 0x8e6b42, 0.75);
+    this.battleLayer.add(boardFrame);
+
+    BOARD_SLOT_POSITIONS.forEach((slot, index) => {
+      const slotSkin = this.add.image(slot.x, slot.y, 'slot-stone').setDisplaySize(58, 58);
+      slotSkin.setAlpha(index < this.state.population ? 1 : 0.35);
+      this.battleLayer?.add(slotSkin);
+      slotSkin.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        if (this.state.boardSlots[index]) {
+          this.state = clearBoardSlot(this.state, index);
+          this.refreshScene('战团已下阵，重新部署。');
+        }
+      });
+
+      const occupantId = this.state.boardSlots[index];
+      if (!occupantId) {
+        const empty = this.add.text(slot.x - 18, slot.y - 10, index < this.state.population ? '上阵' : '封位', {
+          color: '#866440',
+          fontFamily: 'Microsoft YaHei',
+          fontSize: '13px',
+        });
+        this.battleLayer?.add(empty);
+        return;
+      }
+
+      const occupant = getBenchUnitOrThrow(this.state.bench, occupantId);
+      const unitDef = getUnitDefinitionOrThrow(occupant.unitId);
+      const icon = this.add.image(slot.x, slot.y - 2, `unit-${occupant.unitId}`).setDisplaySize(48, 48);
+      const name = this.add.text(slot.x - 24, slot.y + 28, `${unitDef.name.slice(0, 4)} ${occupant.star}星`, {
+        color: '#f8f1e3',
+        fontFamily: 'Microsoft YaHei',
+        fontSize: '11px',
+        backgroundColor: '#5e4127',
+      });
+      this.battleLayer?.add([icon, name]);
+      icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showCard(occupant));
+    });
+
+    const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
+    wave?.enemies.slice(0, 3).forEach((enemy, index) => {
+      const x = 96 + index * 96;
+      const y = 258;
+      const enemyCircle = this.add.circle(x, y, 23, 0x7b4a42, 0.9);
+      enemyCircle.setStrokeStyle(2, 0xf0dec0);
+      const enemyText = this.add.text(x - 18, y - 10, enemy.name.slice(0, 3), {
+        color: '#fef6e5',
         fontFamily: 'Microsoft YaHei',
         fontSize: '12px',
       });
-      marker.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showCard(unit));
-      this.battleLayer?.add([marker, label]);
+      this.battleLayer?.add([enemyCircle, enemyText]);
     });
   }
 
-  private showCard(unit: BenchUnit): void {
-    this.clearOverlay();
-    const overlay = this.add.container(42, 186);
-    const shade = this.add.rectangle(153, 168, 306, 336, 0x111111, 0.32);
-    const panel = this.add.rectangle(153, 168, 286, 296, 0xf8edd6);
-    panel.setStrokeStyle(3, 0x6c4f30);
-    const lines = buildUnitCardLines(unit.unitId, unit.star);
-    const title = this.add.text(46, 52, lines[0], {
-      color: '#2d2115',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '24px',
-      fontStyle: 'bold',
-    });
-    const stats = this.add.text(46, 104, lines[1], {
-      color: '#5a4128',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
-      wordWrap: { width: 220 },
-    });
-    const skill = this.add.text(46, 152, lines[2], {
-      color: '#704c2a',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '17px',
-      wordWrap: { width: 220 },
-    });
-    const close = this.add.text(230, 28, '关闭', {
-      color: '#915b32',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '18px',
-    });
-    close.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.clearOverlay());
-    overlay.add([shade, panel, title, stats, skill, close]);
-    this.overlayLayer = overlay;
-  }
-
-  private runBattle(): void {
-    const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
-    if (!wave) {
-      this.battleInfo?.setText('试炼已完成，当前版本到此结束。');
+  private refreshBench(): void {
+    this.benchLayer?.removeAll(true);
+    if (!this.benchLayer) {
       return;
     }
 
-    const activeUnits = this.state.bench.slice(0, this.state.population);
+    this.benchLayer.add(
+      this.add.text(34, 682, '待上场战团', {
+        color: '#5a422d',
+        fontFamily: 'Microsoft YaHei',
+        fontSize: '20px',
+        fontStyle: 'bold',
+      })
+    );
+
+    this.state.bench.slice(0, 6).forEach((benchUnit, index) => {
+      const card = this.createBenchCard(benchUnit, index);
+      this.benchLayer?.add(card);
+    });
+  }
+
+  private createBenchCard(benchUnit: BenchUnit, index: number): Phaser.GameObjects.Container {
+    const model = buildBenchCardModel(benchUnit);
+    const column = index % 4;
+    const row = Math.floor(index / 4);
+    const originX = 66 + column * 78;
+    const originY = 758 + row * 88;
+    const deployed = this.state.boardSlots.includes(benchUnit.instanceId);
+
+    const container = this.add.container(originX, originY);
+    const frame = this.add.image(0, 0, 'card-unit').setDisplaySize(72, 96);
+    const icon = this.add.image(0, -14, model.artKey).setDisplaySize(40, 40);
+    const title = this.add.text(-24, 18, model.title.slice(0, 4), {
+      color: '#2e1e11',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '13px',
+    });
+    const sub = this.add.text(-24, 34, model.subtitle, {
+      color: '#866441',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '9px',
+    });
+    const chip = this.add.text(-24, 48, deployed ? '已上阵' : model.skillName, {
+      color: deployed ? '#f4eadb' : '#6d4d2a',
+      backgroundColor: deployed ? '#7f4831' : '#dbc198',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '9px',
+      padding: { left: 4, right: 4, top: 2, bottom: 2 },
+    });
+    container.add([frame, icon, title, sub, chip]);
+    container.setSize(72, 96);
+    container.setInteractive({ draggable: true, useHandCursor: true });
+    this.input.setDraggable(container);
+
+    container.on('pointerdown', () => this.showCard(benchUnit));
+    container.on('dragstart', () => {
+      container.setDepth(40);
+      container.setScale(1.06);
+    });
+    container.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+      container.x = dragX;
+      container.y = dragY;
+    });
+    container.on('dragend', (pointer: Phaser.Input.Pointer) => {
+      container.setDepth(0);
+      container.setScale(1);
+      const targetSlotIndex = this.findHoveredSlot(pointer.x, pointer.y);
+      if (targetSlotIndex >= 0) {
+        this.state = assignBoardSlot(this.state, benchUnit.instanceId, targetSlotIndex);
+        this.refreshScene(`已将 ${model.title} 布置到第 ${targetSlotIndex + 1} 格。`);
+      } else {
+        this.refreshScene();
+      }
+    });
+
+    return container;
+  }
+
+  private findHoveredSlot(x: number, y: number): number {
+    for (let index = 0; index < BOARD_SLOT_POSITIONS.length; index += 1) {
+      const slot = BOARD_SLOT_POSITIONS[index];
+      if (Phaser.Math.Distance.Between(x, y, slot.x, slot.y) <= 34) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  private recruitUnit(): void {
+    if (this.overlayLayer) {
+      return;
+    }
+    if (this.state.gold < RECRUIT_COST) {
+      this.refreshWaveInfo('金币不足，无法招募。');
+      return;
+    }
+
+    const unitId = this.state.unlockedUnitIds[this.recruitCursor % this.state.unlockedUnitIds.length];
+    this.recruitCursor += 1;
+    const beforeCount = this.state.bench.length;
+    this.state = autoMergeRunState({
+      ...this.state,
+      gold: this.state.gold - RECRUIT_COST,
+      bench: [...this.state.bench, createBenchUnit(unitId)],
+    });
+    const merged = this.state.bench.length <= beforeCount;
+    this.refreshScene(merged ? '三合一触发，战团已经升星。' : `招募了 ${getUnitDefinitionOrThrow(unitId).name}。`);
+  }
+
+  private runBattle(): void {
+    if (this.overlayLayer) {
+      return;
+    }
+
+    const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
+    if (!wave) {
+      this.refreshWaveInfo('当前版本试炼已完成。');
+      return;
+    }
+
+    const deployed = getDeployedUnits(this.state);
+    if (deployed.length === 0) {
+      this.refreshWaveInfo('先拖拽至少一名战团到战场上阵。');
+      return;
+    }
+
     const result = simulateBattle({
-      alliedUnits: activeUnits,
+      alliedUnits: deployed,
       enemyWaveId: wave.id,
       ownedTotemIds: this.state.ownedTotemIds,
     });
 
     this.state = {
       ...this.state,
-      usedPopulation: activeUnits.length,
+      usedPopulation: deployed.length,
       health: result.outcome === 'victory' ? this.state.health : result.remainingHealth,
     };
 
-    this.battleInfo?.setText(
-      result.outcome === 'victory'
-        ? `${result.waveLabel} 已击破。${result.damageLog.join('  ')}`
-        : `${result.waveLabel} 失利。${result.damageLog.join('  ')}`
-    );
-
     if (result.outcome === 'victory') {
       this.state = advanceAfterVictory(this.state);
-      this.showRewards();
-    } else if (this.state.health <= 0) {
-      this.battleInfo?.setText('战团全灭。刷新页面后重新挑战。');
+      this.showRewards(`${result.waveLabel} 已击破。${result.damageLog.join('  ')}`);
+    } else {
+      this.refreshScene(`${result.waveLabel} 失利。${result.damageLog.join('  ')}`);
     }
-
-    this.refreshScene();
   }
 
-  private showRewards(): void {
+  private showRewards(resultMessage: string): void {
     this.clearOverlay();
+    this.refreshWaveInfo(resultMessage);
+
     const model = buildRewardPanelModel({
       waveNumber: this.state.waveNumber - 1,
       unlockedUnitIds: this.state.unlockedUnitIds,
       ownedTotemIds: this.state.ownedTotemIds,
     });
 
-    const overlay = this.add.container(26, 188);
-    const panel = this.add.rectangle(169, 186, 338, 372, 0xf8edd6);
-    panel.setStrokeStyle(3, 0x6c4f30);
-    const title = this.add.text(116, 28, model.title, {
+    const overlay = this.add.container(24, 188);
+    overlay.setDepth(60);
+    const shade = this.add.rectangle(171, 188, 342, 380, 0x140f0b, 0.36);
+    const panel = this.add.rectangle(171, 188, 338, 376, 0xf7ebd2);
+    panel.setStrokeStyle(3, 0x6d4e31);
+    const title = this.add.text(106, 28, model.title, {
       color: '#2d2115',
       fontFamily: 'Microsoft YaHei',
       fontSize: '28px',
       fontStyle: 'bold',
     });
-    const subtitle = this.add.text(80, 66, model.subtitle, {
-      color: '#7f5d3d',
+    const subtitle = this.add.text(22, 64, model.subtitle, {
+      color: '#6f5235',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
+      fontSize: '15px',
+      wordWrap: { width: 300 },
     });
 
-    overlay.add([panel, title, subtitle]);
-
+    overlay.add([shade, panel, title, subtitle]);
     model.choices.forEach((choice, index) => {
-      overlay.add(this.createRewardButton(choice, 26 + index * 104, 118));
+      overlay.add(this.createRewardCard(choice, 18 + index * 106, 118));
     });
-
     this.overlayLayer = overlay;
   }
 
-  private createRewardButton(choice: RewardChoice, x: number, y: number): Phaser.GameObjects.Container {
+  private createRewardCard(choice: RewardChoice & { artKey?: string; chipText?: string }, x: number, y: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
-    const card = this.add.rectangle(46, 78, 92, 156, 0xe7d2ae);
-    card.setOrigin(0);
-    card.setStrokeStyle(2, 0x6c4f30);
-    const kind = this.add.text(20, 12, choice.kind.toUpperCase(), {
-      color: '#7b5937',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
-    });
-    const label = this.add.text(16, 48, choice.label, {
+    const panel = this.add.rectangle(46, 92, 96, 184, 0xebd8b5);
+    panel.setOrigin(0);
+    panel.setStrokeStyle(2, 0x6d4e31);
+    const icon = this.add.image(94, 40, choice.artKey ?? 'button-lacquer').setDisplaySize(50, 50);
+    const title = this.add.text(18, 76, choice.label, {
       color: '#2d2115',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '18px',
+      fontSize: '17px',
       fontStyle: 'bold',
-      wordWrap: { width: 72 },
+      wordWrap: { width: 56 },
     });
-    const desc = this.add.text(16, 92, choice.description, {
-      color: '#674a30',
+    const chip = this.add.text(18, 120, choice.chipText ?? choice.kind, {
+      color: '#f7ebd2',
+      backgroundColor: '#7d4d2e',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
-      wordWrap: { width: 72 },
+      fontSize: '10px',
+      padding: { left: 4, right: 4, top: 2, bottom: 2 },
     });
-    card.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.pickReward(choice));
-    container.add([card, kind, label, desc]);
+    const desc = this.add.text(18, 146, choice.description, {
+      color: '#6b4c2c',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '11px',
+      wordWrap: { width: 56 },
+    });
+    panel.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.pickReward(choice));
+    container.add([panel, icon, title, chip, desc]);
     return container;
   }
 
   private pickReward(choice: RewardChoice): void {
+    const before = this.state.bench.length;
     this.state = applyRewardChoice(this.state, choice);
     this.clearOverlay();
-    this.battleInfo?.setText(`获得 ${choice.label}。继续推进下一波。`);
-    this.refreshScene();
+    const merged = this.state.bench.length < before + (choice.kind === 'unit' ? 1 : 0);
+    this.refreshScene(merged ? `获得 ${choice.label}，并触发了三合一升星。` : `获得 ${choice.label}。继续推进下一波。`);
+  }
+
+  private showCard(unit: BenchUnit): void {
+    this.clearOverlay();
+    const overlay = this.add.container(38, 172);
+    overlay.setDepth(70);
+    const shade = this.add.rectangle(157, 178, 314, 356, 0x18120d, 0.32);
+    const panel = this.add.rectangle(157, 178, 298, 332, 0xf8edd6);
+    panel.setStrokeStyle(3, 0x6d4e31);
+    const icon = this.add.image(62, 72, `unit-${unit.unitId}`).setDisplaySize(78, 78);
+    const lines = buildUnitCardLines(unit.unitId, unit.star);
+    const title = this.add.text(116, 36, lines[0], {
+      color: '#2d2115',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '24px',
+      fontStyle: 'bold',
+    });
+    const stats = this.add.text(116, 82, lines[1], {
+      color: '#5a4128',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '15px',
+      wordWrap: { width: 152 },
+    });
+    const skill = this.add.text(34, 152, lines[2], {
+      color: '#714d2d',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '16px',
+      wordWrap: { width: 244 },
+    });
+    const lore = this.add.text(34, 230, lines[3], {
+      color: '#8a6742',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '15px',
+      wordWrap: { width: 244 },
+    });
+    const close = this.add.text(238, 24, '关闭', {
+      color: '#915b32',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '18px',
+    });
+    close.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.clearOverlay());
+    overlay.add([shade, panel, icon, title, stats, skill, lore, close]);
+    this.overlayLayer = overlay;
+  }
+
+  private refreshButtonState(): void {
+    const deployedCount = getDeployedUnits(this.state).length;
+    this.startButton?.setAlpha(deployedCount > 0 && !this.overlayLayer ? 1 : 0.65);
+    this.recruitButton?.setAlpha(this.state.gold >= RECRUIT_COST && !this.overlayLayer ? 1 : 0.7);
   }
 
   private clearOverlay(): void {

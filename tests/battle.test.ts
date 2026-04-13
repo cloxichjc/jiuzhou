@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { simulateBattle } from '../src/game/core/battle';
-import { advanceAfterVictory, applyRewardChoice, initialRunState } from '../src/game/core/run-state';
+import {
+  advanceAfterVictory,
+  applyRewardChoice,
+  assignBoardSlot,
+  clearBoardSlot,
+  getDeployedUnits,
+  initialRunState,
+} from '../src/game/core/run-state';
 
 describe('simulateBattle', () => {
   it('lets a simple tribe squad defeat the first wave and keep survivors', () => {
+    const deployedState = assignBoardSlot(
+      assignBoardSlot(initialRunState, initialRunState.bench[0].instanceId, 0),
+      initialRunState.bench[1].instanceId,
+      1
+    );
+
     const result = simulateBattle({
-      alliedUnits: initialRunState.bench.slice(0, 2),
+      alliedUnits: getDeployedUnits(deployedState),
       enemyWaveId: 'wave-1',
       ownedTotemIds: ['war-drum'],
     });
@@ -29,5 +42,16 @@ describe('run-state loop', () => {
     expect(afterReward.waveNumber).toBe(2);
     expect(afterReward.population).toBe(2);
     expect(afterReward.gold).toBeGreaterThan(initialRunState.gold);
+    expect(afterReward.boardSlots).toHaveLength(3);
+  });
+
+  it('assigns and clears board slots without mutating bench ownership', () => {
+    const deployed = assignBoardSlot(initialRunState, initialRunState.bench[0].instanceId, 0);
+    expect(getDeployedUnits(deployed)).toHaveLength(1);
+    expect(deployed.usedPopulation).toBe(1);
+
+    const cleared = clearBoardSlot(deployed, 0);
+    expect(getDeployedUnits(cleared)).toHaveLength(0);
+    expect(cleared.usedPopulation).toBe(0);
   });
 });
