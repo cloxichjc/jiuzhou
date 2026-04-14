@@ -63,9 +63,11 @@ export function stepBattleRuntime(state: BattleRuntimeState, deltaMs: number): B
 
     const distance = PhaserLike.distance(actor.x, actor.y, target.x, target.y);
     const engagementRange = actor.range + (actor.kind === 'melee' ? 22 : 0);
+    const slowed = actor.slowUntilMs !== undefined && actor.slowUntilMs > state.elapsedMs;
+    const effectiveSpeed = slowed ? actor.speed * 0.6 : actor.speed;
 
     if (distance > engagementRange) {
-      const moveDistance = Math.min((actor.speed * deltaMs) / 1000, distance - engagementRange);
+      const moveDistance = Math.min((effectiveSpeed * deltaMs) / 1000, distance - engagementRange);
       const dx = ((target.x - actor.x) / distance) * moveDistance;
       const dy = ((target.y - actor.y) / distance) * moveDistance;
       actor.x += dx;
@@ -77,9 +79,14 @@ export function stepBattleRuntime(state: BattleRuntimeState, deltaMs: number): B
       continue;
     }
 
-    const damage = Math.max(5, Math.round(actor.attack));
+    actor.attackCounter += 1;
+    const damageProfile = computeDamageProfile(actor, target, distance, state.elapsedMs);
+    const damage = Math.max(5, Math.round(damageProfile.amount));
     target.currentHealth = Math.max(0, target.currentHealth - damage);
     actor.cooldownRemainingMs = actor.attackIntervalMs;
+    if (damageProfile.effect === 'slow') {
+      target.slowUntilMs = state.elapsedMs + 1600;
+    }
     events.push({
       actorId: actor.id,
       actorName: actor.name,
@@ -87,6 +94,7 @@ export function stepBattleRuntime(state: BattleRuntimeState, deltaMs: number): B
       targetName: target.name,
       amount: damage,
       kind: actor.kind,
+      effect: damageProfile.effect,
       timestampMs: state.elapsedMs + deltaMs,
       fromX: actor.x,
       fromY: actor.y,
@@ -185,6 +193,8 @@ function createAllyActor(unit: BenchUnit, ownedTotemIds: string[], index: number
     speed: definition.role === 'skirmisher' ? 68 : definition.role === 'support' ? 30 : 54,
     attackIntervalMs: definition.attackIntervalMs,
     cooldownRemainingMs: definition.attackIntervalMs * 0.35,
+    attackCounter: 0,
+    didCharge: false,
   };
 }
 
@@ -204,7 +214,43 @@ function createEnemyActor(enemy: WaveEnemy, index: number): BattleActor {
     speed: 44,
     attackIntervalMs: 1180,
     cooldownRemainingMs: 280,
+    attackCounter: 0,
+    didCharge: false,
   };
+}
+
+function computeDamageProfile(
+  actor: BattleActor,
+  target: BattleActor,
+  distance: number,
+  elapsedMs: number
+): { amount: number; effect?: 'crit' | 'slow' | 'charge' | 'longshot' } {
+  let amount = actor.attack;
+  let effect: 'crit' | 'slow' | 'charge' | 'longshot' | undefined;
+
+  if (actor.unitId === 'axe-warrior' && actor.attackCounter % 3 === 0) {
+    amount *= 1.8;
+    effect = 'crit';
+  }
+
+  if (actor.unitId === 'wolf-rider' && !actor.didCharge) {
+    amount *= 1.65;
+    actor.didCharge = true;
+    effect = 'charge';
+  }
+
+  if (actor.unitId === 'wastes-hunter' && distance > 130) {
+    amount *= 1.35;
+    effect = 'longshot';
+  }
+
+  if (actor.unitId === 'frost-shaman') {
+    amount *= 0.9;
+    effect = 'slow';
+    target.slowUntilMs = elapsedMs + 1600;
+  }
+
+  return { amount, effect };
 }
 
 function findNearestTarget(actor: BattleActor, actors: BattleActor[]): BattleActor | undefined {

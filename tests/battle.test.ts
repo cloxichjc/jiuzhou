@@ -52,6 +52,41 @@ describe('simulateBattle', () => {
     expect(runtime.status).toBe('victory');
     expect(runtime.elapsedMs).toBeLessThan(12000);
   });
+
+  it('marks skill-driven combat effects in realtime events', () => {
+    const expandedState = applyRewardChoice(
+      applyRewardChoice(initialRunState, {
+        kind: 'economy',
+        id: 'population-2',
+        label: '扩充人口',
+        description: '人口上限 +1，金币 +20。',
+      }),
+      {
+        kind: 'economy',
+        id: 'population-3',
+        label: '扩充人口',
+        description: '人口上限 +1，金币 +20。',
+      }
+    );
+
+    const staged = assignBoardSlot(
+      assignBoardSlot(
+        assignBoardSlot(expandedState, expandedState.bench[0].instanceId, 0),
+        expandedState.bench[1].instanceId,
+        1
+      ),
+      expandedState.bench[2].instanceId,
+      2
+    );
+
+    const result = simulateBattle({
+      alliedUnits: getDeployedUnits(staged),
+      enemyWaveId: 'wave-2',
+      ownedTotemIds: [],
+    });
+
+    expect(result.events.some((event) => event.effect === 'slow' || event.effect === 'charge' || event.effect === 'crit')).toBe(true);
+  });
 });
 
 describe('run-state loop', () => {

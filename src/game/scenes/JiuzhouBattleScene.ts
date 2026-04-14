@@ -554,7 +554,19 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       return;
     }
 
-    const tint = event.kind === 'spell' ? 0x9dd3ff : event.kind === 'projectile' ? 0xe9c074 : 0xdc7b58;
+    const tint = event.effect === 'crit'
+      ? 0xff9b5c
+      : event.effect === 'slow'
+        ? 0x8fd4ff
+        : event.effect === 'charge'
+          ? 0xd7c15d
+          : event.effect === 'longshot'
+            ? 0xf2d889
+            : event.kind === 'spell'
+              ? 0x9dd3ff
+              : event.kind === 'projectile'
+                ? 0xe9c074
+                : 0xdc7b58;
     const projectile = this.add.circle(event.fromX, event.fromY, event.kind === 'melee' ? 7 : 5, tint, 0.95);
     const trail = this.add.rectangle(
       (event.fromX + event.toX) / 2,
@@ -575,7 +587,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       ease: 'Quad.easeOut',
       onComplete: () => {
         const burst = this.add.circle(event.toX, event.toY, 10, tint, 0.4);
-        const damage = this.add.text(event.toX - 10, event.toY - 14, `${event.amount}`, {
+        const damage = this.add.text(event.toX - 12, event.toY - 14, `${event.amount}`, {
           color: '#fff4d7',
           stroke: '#66391f',
           strokeThickness: 3,
@@ -583,22 +595,45 @@ export class JiuzhouBattleScene extends Phaser.Scene {
           fontSize: '18px',
           fontStyle: 'bold',
         });
-        this.effectsLayer?.add([burst, damage]);
+        const marker = event.effect
+          ? this.add.text(event.toX - 18, event.toY + 4, this.effectLabel(event.effect), {
+              color: '#fdf1d9',
+              backgroundColor: '#6b4125',
+              fontFamily: 'Microsoft YaHei',
+              fontSize: '10px',
+              padding: { left: 4, right: 4, top: 2, bottom: 2 },
+            })
+          : undefined;
+        this.effectsLayer?.add(marker ? [burst, damage, marker] : [burst, damage]);
         this.cameras.main.shake(90, 0.0025);
         this.tweens.add({
-          targets: [burst, damage],
+          targets: marker ? [burst, damage, marker] : [burst, damage],
           y: '-=22',
           alpha: 0,
           duration: 420,
           onComplete: () => {
             burst.destroy();
             damage.destroy();
+            marker?.destroy();
           },
         });
         projectile.destroy();
         trail.destroy();
       },
     });
+  }
+
+  private effectLabel(effect: NonNullable<BattleEvent['effect']>): string {
+    if (effect === 'crit') {
+      return '裂骨';
+    }
+    if (effect === 'slow') {
+      return '霜咒';
+    }
+    if (effect === 'charge') {
+      return '扑袭';
+    }
+    return '远矛';
   }
 
   private showResultBanner(outcome: BattleSimulationResult['outcome'], deployedCount: number): void {

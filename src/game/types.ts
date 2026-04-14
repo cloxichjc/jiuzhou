@@ -75,6 +75,7 @@ export interface BattleEvent {
   targetName: string;
   amount: number;
   kind: 'melee' | 'spell' | 'projectile';
+  effect?: 'crit' | 'slow' | 'charge' | 'longshot';
   timestampMs: number;
   fromX: number;
   fromY: number;
@@ -99,6 +100,9 @@ export interface BattleActor {
   speed: number;
   attackIntervalMs: number;
   cooldownRemainingMs: number;
+  attackCounter: number;
+  didCharge: boolean;
+  slowUntilMs?: number;
 }
 
 export interface BattleRuntimeState {
