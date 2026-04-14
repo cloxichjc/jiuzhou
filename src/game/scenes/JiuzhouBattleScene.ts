@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { createBattleRuntime, stepBattleRuntime, summarizeBattleRuntime } from '../core/battle';
-import { autoMergeRunState, applyRewardChoice, assignBoardSlot, clearBoardSlot, getDeployedUnits, advanceAfterVictory, initialRunState } from '../core/run-state';
+import { autoMergeRunState, applyRewardChoice, assignBoardSlot, getDeployedUnits, advanceAfterVictory, initialRunState } from '../core/run-state';
 import { createBenchUnit, getBenchUnitOrThrow, getUnitDefinitionOrThrow } from '../core/helpers';
 import { chapter } from '../data/chapter';
 import { waves } from '../data/waves';
@@ -113,8 +113,8 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   }
 
   private createButtons(): void {
-    this.recruitButton = this.buildButton(86, 791, 84, 44, '招募', '#fff5ea', () => this.recruitUnit());
-    this.startButton = this.buildButton(300, 788, 114, 54, '开始', '#fff5ea', () => this.runBattle());
+    this.recruitButton = this.buildButton(304, 722, 92, 44, '招募', '#fff5ea', () => this.recruitUnit());
+    this.startButton = this.buildButton(304, 790, 108, 52, '开始', '#fff5ea', () => this.runBattle());
     this.recruitButton.setDepth(14);
     this.startButton.setDepth(14);
   }
@@ -191,12 +191,6 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       const slotSkin = this.add.image(slot.x, slot.y, 'slot-stone').setDisplaySize(58, 58);
       slotSkin.setAlpha(index < this.state.population ? 1 : 0.35);
       this.battleLayer?.add(slotSkin);
-      slotSkin.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-        if (this.state.boardSlots[index]) {
-          this.state = clearBoardSlot(this.state, index);
-          this.refreshScene('战团已下阵，重新部署。');
-        }
-      });
 
       const occupantId = this.state.boardSlots[index];
       if (!occupantId) {
@@ -289,34 +283,34 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
   private createBenchCard(benchUnit: BenchUnit, index: number): Phaser.GameObjects.Container {
     const model = buildBenchCardModel(benchUnit);
-    const column = index % 4;
-    const row = Math.floor(index / 4);
-    const originX = 66 + column * 78;
-    const originY = 758 + row * 88;
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const originX = 62 + column * 78;
+    const originY = 724 + row * 68;
     const deployed = this.state.boardSlots.includes(benchUnit.instanceId);
 
     const container = this.add.container(originX, originY);
-    const frame = this.add.image(0, 0, 'card-unit').setDisplaySize(72, 96);
-    const icon = this.add.image(0, -14, model.artKey).setDisplaySize(40, 40);
-    const title = this.add.text(-24, 18, model.title.slice(0, 4), {
+    const frame = this.add.image(0, 0, 'card-unit').setDisplaySize(64, 82);
+    const icon = this.add.image(0, -14, model.artKey).setDisplaySize(32, 32);
+    const title = this.add.text(-20, 12, model.title.slice(0, 4), {
       color: '#2e1e11',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '13px',
+      fontSize: '12px',
     });
-    const sub = this.add.text(-24, 34, model.subtitle, {
+    const sub = this.add.text(-20, 26, model.subtitle, {
       color: '#866441',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '9px',
+      fontSize: '8px',
     });
-    const chip = this.add.text(-24, 48, deployed ? '已上阵' : model.skillName, {
+    const chip = this.add.text(-20, 40, deployed ? '已上阵' : model.skillName, {
       color: deployed ? '#f4eadb' : '#6d4d2a',
       backgroundColor: deployed ? '#7f4831' : '#dbc198',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '9px',
-      padding: { left: 4, right: 4, top: 2, bottom: 2 },
+      fontSize: '8px',
+      padding: { left: 3, right: 3, top: 2, bottom: 2 },
     });
     container.add([frame, icon, title, sub, chip]);
-    container.setSize(72, 96);
+    container.setSize(64, 82);
     container.setInteractive({ draggable: true, useHandCursor: true });
     this.input.setDraggable(container);
 
