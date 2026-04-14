@@ -8,6 +8,8 @@ import { buildBenchCardModel } from '../ui/bench';
 import { buildUnitCardLines } from '../ui/card-modal';
 import { createHud, updateHud, type HudRefs } from '../ui/hud';
 import { buildRewardPanelModel } from '../ui/reward-panel';
+import { preloadSharedAssets } from '../ui/assets';
+import { playDefeat, playDeploy, playHit, playUiClick, playVictory } from '../ui/sfx';
 import type { BattleEvent, BattleRuntimeState, BattleSimulationResult, BenchUnit, RewardChoice, RunState } from '../types';
 
 interface SlotAnchor {
@@ -39,32 +41,20 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   private runtimeState?: BattleRuntimeState;
 
   preload(): void {
-    this.load.image('ground', '/art/frost-ground.svg');
-    this.load.image('board-shangzhou', '/art/board-shangzhou.svg');
-    this.load.image('panel-header', '/art/panel-header.svg');
-    this.load.image('panel-bench', '/art/panel-bench.svg');
-    this.load.image('panel-detail', '/art/panel-detail.svg');
-    this.load.image('panel-reward', '/art/panel-reward.svg');
-    this.load.image('card-unit', '/art/card-unit.svg');
-    this.load.image('card-reward', '/art/card-reward.svg');
-    this.load.image('card-bench-compact', '/art/card-bench-compact.svg');
-    this.load.image('hud-pill', '/art/hud-pill.svg');
-    this.load.image('button-lacquer', '/art/button-lacquer.svg');
-    this.load.image('slot-stone', '/art/slot-stone.svg');
-    this.load.image('unit-axe-warrior', '/art/unit-axe-warrior.svg');
-    this.load.image('unit-frost-shaman', '/art/unit-frost-shaman.svg');
-    this.load.image('unit-wolf-rider', '/art/unit-wolf-rider.svg');
-    this.load.image('unit-wastes-hunter', '/art/unit-wastes-hunter.svg');
-    this.load.image('enemy-melee', '/art/enemy-melee.svg');
-    this.load.image('enemy-projectile', '/art/enemy-projectile.svg');
-    this.load.image('enemy-spell', '/art/enemy-spell.svg');
-    this.load.image('totem-war-drum', '/art/totem-war-drum.svg');
-    this.load.image('totem-wolf-spirit', '/art/totem-wolf-spirit.svg');
-    this.load.image('totem-frost-bone', '/art/totem-frost-bone.svg');
+    preloadSharedAssets(this);
+  }
+
+  init(): void {
+    this.state = structuredClone(initialRunState);
+    this.runtimeState = undefined;
+    this.overlayLayer = undefined;
+    this.recruitCursor = 0;
+    this.resolvingBattle = false;
   }
 
   create(): void {
     this.input.setTopOnly(false);
+    this.cameras.main.fadeIn(180, 18, 12, 8);
     this.drawBackdrop();
     this.battleLayer = this.add.container(0, 0);
     this.benchLayer = this.add.container(0, 0);
@@ -73,6 +63,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.createInfoText();
     this.createButtons();
     this.refreshScene('拖拽战团卡牌到战场圆阵上阵。');
+    this.showWaveBanner(`第 ${this.state.waveNumber} 波 · ${waves[0]?.title ?? '试炼开始'}`);
   }
 
   update(_time: number, delta: number): void {
@@ -148,7 +139,10 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       fontSize: label.length > 2 ? '20px' : '24px',
       fontStyle: 'bold',
     });
-    skin.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+    skin.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      playUiClick(this);
+      onClick();
+    });
     container.add([skin, text]);
     return container;
   }
@@ -384,6 +378,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       container.setScale(1);
       const targetSlotIndex = this.findHoveredSlot(pointer.x, pointer.y);
       if (targetSlotIndex >= 0) {
+        playDeploy(this);
         this.state = assignBoardSlot(this.state, benchUnit.instanceId, targetSlotIndex);
         this.refreshScene(`已将 ${model.title} 布置到第 ${targetSlotIndex + 1} 格。`);
       } else {
@@ -528,11 +523,13 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   }
 
   private pickReward(choice: RewardChoice): void {
+    playUiClick(this);
     const before = this.state.bench.length;
     this.state = applyRewardChoice(this.state, choice);
     this.clearOverlay();
     const merged = this.state.bench.length < before + (choice.kind === 'unit' ? 1 : 0);
     this.refreshScene(merged ? `获得 ${choice.label}，并触发了三合一升星。` : `获得 ${choice.label}。继续推进下一波。`);
+    this.showWaveBanner(`第 ${this.state.waveNumber} 波 · ${waves.find((wave) => wave.id === `wave-${this.state.waveNumber}`)?.title ?? '继续试炼'}`);
   }
 
   private showCard(unit: BenchUnit): void {
@@ -664,6 +661,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
             })
           : undefined;
         this.effectsLayer?.add(marker ? [burst, damage, marker] : [burst, damage]);
+        playHit(this, event.effect === 'crit' || event.effect === 'charge');
         this.cameras.main.shake(90, 0.0025);
         this.tweens.add({
           targets: marker ? [burst, damage, marker] : [burst, damage],
@@ -733,6 +731,11 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
     if (summary.outcome === 'victory') {
       this.state = advanceAfterVictory(this.state);
+      playVictory(this);
+      if (this.state.waveNumber > waves.length) {
+        this.showResultOverlay('试炼凯旋', '你已经完成殇州·北陆荒原的全部波次。');
+        return;
+      }
       this.showRewards(`${summary.waveLabel} 已击破。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
       return;
     }
@@ -741,7 +744,8 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       ...this.state,
       health: summary.remainingHealth,
     };
-    this.refreshScene(`${summary.waveLabel} 失利。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
+    playDefeat(this);
+    this.showResultOverlay('试炼折戟', `${summary.waveLabel} 失利。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
   }
 
   private getEnemyArtKey(kind: 'melee' | 'spell' | 'projectile'): string {
@@ -762,5 +766,77 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       return '术法';
     }
     return '近战';
+  }
+
+  private showWaveBanner(text: string): void {
+    const banner = this.add.container(64, 186);
+    banner.setDepth(80);
+    const panel = this.add.image(132, 22, 'hud-pill').setDisplaySize(244, 38);
+    const label = this.add.text(44, 9, text, {
+      color: '#5c4127',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '16px',
+      fontStyle: 'bold',
+    });
+    banner.add([panel, label]);
+    this.tweens.add({
+      targets: banner,
+      y: 168,
+      alpha: 0,
+      delay: 620,
+      duration: 340,
+      onComplete: () => banner.destroy(true),
+    });
+  }
+
+  private showResultOverlay(titleText: string, bodyText: string): void {
+    this.clearOverlay();
+    const overlay = this.add.container(24, 188);
+    overlay.setDepth(90);
+    const shade = this.add.rectangle(171, 188, 342, 380, 0x140f0b, 0.42);
+    const panel = this.add.image(186, 196, 'panel-reward').setDisplaySize(344, 392);
+    const title = this.add.text(104, 42, titleText, {
+      color: '#2d2115',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '28px',
+      fontStyle: 'bold',
+    });
+    const body = this.add.text(34, 98, bodyText, {
+      color: '#6b4f31',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '15px',
+      wordWrap: { width: 300 },
+    });
+    const retry = this.buildOverlayButton(90, 286, 120, 46, titleText === '试炼凯旋' ? '再开一局' : '重新试炼', () => {
+      playUiClick(this);
+      this.scene.start('JiuzhouBattleScene', { freshRun: true });
+    });
+    const home = this.buildOverlayButton(242, 286, 120, 46, '返回首页', () => {
+      playUiClick(this);
+      this.scene.start('TitleScene');
+    });
+    overlay.add([shade, panel, title, body, retry, home]);
+    this.overlayLayer = overlay;
+  }
+
+  private buildOverlayButton(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    label: string,
+    onClick: () => void
+  ): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y);
+    const skin = this.add.image(0, 0, 'button-lacquer').setDisplaySize(width, height);
+    const text = this.add.text(label.length > 3 ? -34 : -28, -14, label, {
+      color: '#fff5ea',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: label.length > 3 ? '18px' : '20px',
+      fontStyle: 'bold',
+    });
+    skin.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+    container.add([skin, text]);
+    return container;
   }
 }

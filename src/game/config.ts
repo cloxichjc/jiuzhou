@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { TitleScene } from './scenes/TitleScene';
 import { JiuzhouBattleScene } from './scenes/JiuzhouBattleScene';
 
 export const phaserConfig: Phaser.Types.Core.GameConfig = {
@@ -7,7 +8,7 @@ export const phaserConfig: Phaser.Types.Core.GameConfig = {
   width: 390,
   height: 844,
   backgroundColor: '#1a120e',
-  scene: [JiuzhouBattleScene],
+  scene: [TitleScene, JiuzhouBattleScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
