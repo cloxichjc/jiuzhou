@@ -40,6 +40,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image('ground', '/art/frost-ground.svg');
+    this.load.image('board-shangzhou', '/art/board-shangzhou.svg');
     this.load.image('panel-header', '/art/panel-header.svg');
     this.load.image('panel-bench', '/art/panel-bench.svg');
     this.load.image('card-unit', '/art/card-unit.svg');
@@ -49,6 +50,9 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.load.image('unit-frost-shaman', '/art/unit-frost-shaman.svg');
     this.load.image('unit-wolf-rider', '/art/unit-wolf-rider.svg');
     this.load.image('unit-wastes-hunter', '/art/unit-wastes-hunter.svg');
+    this.load.image('enemy-melee', '/art/enemy-melee.svg');
+    this.load.image('enemy-projectile', '/art/enemy-projectile.svg');
+    this.load.image('enemy-spell', '/art/enemy-spell.svg');
     this.load.image('totem-war-drum', '/art/totem-war-drum.svg');
     this.load.image('totem-wolf-spirit', '/art/totem-wolf-spirit.svg');
     this.load.image('totem-frost-bone', '/art/totem-frost-bone.svg');
@@ -86,10 +90,10 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   private drawBackdrop(): void {
     this.add.image(195, 422, 'ground').setDisplaySize(390, 844);
     this.add.image(195, 104, 'panel-header').setDisplaySize(360, 154);
-    this.add.rectangle(195, 368, 332, 444, 0x000000, 0.06).setStrokeStyle(4, 0x725436, 0.65);
+    this.add.image(195, 376, 'board-shangzhou').setDisplaySize(334, 446);
     this.add.image(195, 745, 'panel-bench').setDisplaySize(360, 168);
     this.add.rectangle(195, 621, 328, 62, 0xf4e6c9, 0.88).setStrokeStyle(2, 0x82603c, 0.7);
-    this.add.text(270, 138, '殇州试炼', {
+    this.add.text(248, 138, '殇州试炼', {
       color: '#765635',
       fontFamily: 'Microsoft YaHei',
       fontSize: '18px',
@@ -174,17 +178,6 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       return;
     }
 
-    const boardFrame = this.add.rectangle(195, 368, 316, 408, 0xf3ead3, 0.08);
-    boardFrame.setStrokeStyle(3, 0x8e6b42, 0.75);
-    this.battleLayer.add(boardFrame);
-    const boardTitle = this.add.text(136, 176, '北陆战桌', {
-      color: '#71512d',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
-      fontStyle: 'bold',
-    });
-    this.battleLayer.add(boardTitle);
-
     if (this.resolvingBattle && this.runtimeState) {
       this.renderRuntimeBattlefield();
       return;
@@ -208,14 +201,15 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
       const occupant = getBenchUnitOrThrow(this.state.bench, occupantId);
       const unitDef = getUnitDefinitionOrThrow(occupant.unitId);
-      const icon = this.add.image(slot.x, slot.y - 2, `unit-${occupant.unitId}`).setDisplaySize(48, 48);
-      const name = this.add.text(slot.x - 24, slot.y + 28, `${unitDef.name.slice(0, 4)} ${occupant.star}星`, {
+      const pedestal = this.add.ellipse(slot.x, slot.y + 20, 44, 14, 0x4b6543, 0.22);
+      const icon = this.add.image(slot.x, slot.y + 2, `unit-${occupant.unitId}`).setDisplaySize(56, 56);
+      const name = this.add.text(slot.x - 24, slot.y + 34, `${unitDef.name.slice(0, 4)} ${occupant.star}星`, {
         color: '#f8f1e3',
         fontFamily: 'Microsoft YaHei',
         fontSize: '11px',
-        backgroundColor: '#5e4127',
+        backgroundColor: '#4f6a41',
       });
-      this.battleLayer?.add([icon, name]);
+      this.battleLayer?.add([pedestal, icon, name]);
       icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showCard(occupant));
     });
 
@@ -223,14 +217,21 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     wave?.enemies.slice(0, 3).forEach((enemy, index) => {
       const x = 96 + index * 96;
       const y = 258;
-      const enemyCircle = this.add.circle(x, y, 23, 0x7b4a42, 0.9);
-      enemyCircle.setStrokeStyle(2, 0xf0dec0);
+      const enemyBase = this.add.ellipse(x, y + 20, 46, 14, 0x6d4138, 0.24);
+      const enemyArt = this.add.image(x, y, this.getEnemyArtKey(enemy.kind ?? 'melee')).setDisplaySize(56, 56);
       const enemyText = this.add.text(x - 18, y - 10, enemy.name.slice(0, 3), {
         color: '#fef6e5',
         fontFamily: 'Microsoft YaHei',
         fontSize: '12px',
       });
-      this.battleLayer?.add([enemyCircle, enemyText]);
+      const enemyTag = this.add.text(x - 16, y + 26, this.getEnemyKindLabel(enemy.kind ?? 'melee'), {
+        color: '#f8ead7',
+        backgroundColor: '#71483b',
+        fontFamily: 'Microsoft YaHei',
+        fontSize: '9px',
+        padding: { left: 4, right: 4, top: 2, bottom: 2 },
+      });
+      this.battleLayer?.add([enemyBase, enemyArt, enemyText, enemyTag]);
     });
   }
 
@@ -252,10 +253,9 @@ export class JiuzhouBattleScene extends Phaser.Scene {
           : actor.kind === 'spell'
             ? 0x5f6e90
             : 0x7b4a42;
-      const spriteKey = isAlly && actor.unitId ? `unit-${actor.unitId}` : undefined;
-      const token = spriteKey
-        ? this.add.image(actor.x, actor.y, spriteKey).setDisplaySize(48, 48)
-        : this.add.circle(actor.x, actor.y, 23, fillColor, 0.94);
+      const spriteKey = isAlly && actor.unitId ? `unit-${actor.unitId}` : this.getEnemyArtKey(actor.kind);
+      const base = this.add.ellipse(actor.x, actor.y + 20, 44, 14, fillColor, 0.2);
+      const token = this.add.image(actor.x, actor.y + 2, spriteKey).setDisplaySize(56, 56);
       const hpRatio = actor.currentHealth / actor.maxHealth;
       const hpBg = this.add.rectangle(actor.x, actor.y - 32, 40, 5, 0x2c2015, 0.8);
       const hpFg = this.add.rectangle(actor.x - 20 + 40 * hpRatio / 2, actor.y - 32, 40 * hpRatio, 5, isAlly ? 0x9cc36f : 0xd77a68);
@@ -274,7 +274,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
             padding: { left: 4, right: 4, top: 2, bottom: 2 },
           })
         : undefined;
-      this.battleLayer.add(status ? [token, hpBg, hpFg, name, status] : [token, hpBg, hpFg, name]);
+      this.battleLayer.add(status ? [base, token, hpBg, hpFg, name, status] : [base, token, hpBg, hpFg, name]);
     }
   }
 
@@ -701,5 +701,25 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       health: summary.remainingHealth,
     };
     this.refreshScene(`${summary.waveLabel} 失利。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
+  }
+
+  private getEnemyArtKey(kind: 'melee' | 'spell' | 'projectile'): string {
+    if (kind === 'projectile') {
+      return 'enemy-projectile';
+    }
+    if (kind === 'spell') {
+      return 'enemy-spell';
+    }
+    return 'enemy-melee';
+  }
+
+  private getEnemyKindLabel(kind: 'melee' | 'spell' | 'projectile'): string {
+    if (kind === 'projectile') {
+      return '远袭';
+    }
+    if (kind === 'spell') {
+      return '术法';
+    }
+    return '近战';
   }
 }

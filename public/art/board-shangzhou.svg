@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 980">
+  <defs>
+    <linearGradient id="parchment" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7ecd7"/>
+      <stop offset="100%" stop-color="#dfc79d"/>
+    </linearGradient>
+    <linearGradient id="enemyZone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8d5f53" stop-opacity=".28"/>
+      <stop offset="100%" stop-color="#8d5f53" stop-opacity=".06"/>
+    </linearGradient>
+    <linearGradient id="allyZone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#59734a" stop-opacity=".12"/>
+      <stop offset="100%" stop-color="#59734a" stop-opacity=".28"/>
+    </linearGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="7"/>
+      <feColorMatrix values="1 0 0 0 0
+                             0 1 0 0 0
+                             0 0 1 0 0
+                             0 0 0 .04 0"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="744" height="964" rx="40" fill="#5a3f27"/>
+  <rect x="24" y="24" width="712" height="932" rx="30" fill="url(#parchment)"/>
+  <rect x="44" y="60" width="672" height="372" rx="26" fill="url(#enemyZone)"/>
+  <rect x="44" y="536" width="672" height="360" rx="26" fill="url(#allyZone)"/>
+  <path d="M72 470c96-44 190-58 308-58 118 0 212 14 308 58-96 38-190 52-308 52-118 0-212-14-308-52z" fill="#eef5fa" opacity=".44"/>
+  <path d="M120 210c58-26 122-40 190-40 68 0 132 14 190 40-58 24-122 38-190 38-68 0-132-14-190-38z" fill="#f7f0e0" opacity=".32"/>
+  <path d="M188 694c54-20 114-32 192-32 78 0 138 12 192 32-54 24-114 36-192 36-78 0-138-12-192-36z" fill="#f7f0e0" opacity=".22"/>
+  <path d="M76 112h608M76 848h608" stroke="#8a6841" stroke-width="4" opacity=".5"/>
+  <path d="M122 292h516M122 650h516" stroke="#b0895b" stroke-width="3" opacity=".38" stroke-dasharray="12 14"/>
+  <text x="380" y="98" text-anchor="middle" font-size="34" font-family="Microsoft YaHei" fill="#6d4d2c" font-weight="700">殇州试炼战盘</text>
+  <text x="380" y="156" text-anchor="middle" font-size="22" font-family="Microsoft YaHei" fill="#7d5a37">荒魂与北陆部族在冻土边缘交锋</text>
+  <text x="380" y="258" text-anchor="middle" font-size="24" font-family="Microsoft YaHei" fill="#7a534b" font-weight="700">敌阵</text>
+  <text x="380" y="754" text-anchor="middle" font-size="24" font-family="Microsoft YaHei" fill="#4f663d" font-weight="700">我阵</text>
+  <rect x="40" y="40" width="680" height="900" rx="28" fill="none" stroke="#886640" stroke-width="6" opacity=".6"/>
+  <rect x="0" y="0" width="760" height="980" filter="url(#grain)"/>
+</svg>
