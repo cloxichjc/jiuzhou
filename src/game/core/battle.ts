@@ -62,9 +62,10 @@ export function stepBattleRuntime(state: BattleRuntimeState, deltaMs: number): B
     }
 
     const distance = PhaserLike.distance(actor.x, actor.y, target.x, target.y);
+    const engagementRange = actor.range + (actor.kind === 'melee' ? 22 : 0);
 
-    if (distance > actor.range) {
-      const moveDistance = Math.min((actor.speed * deltaMs) / 1000, distance - actor.range);
+    if (distance > engagementRange) {
+      const moveDistance = Math.min((actor.speed * deltaMs) / 1000, distance - engagementRange);
       const dx = ((target.x - actor.x) / distance) * moveDistance;
       const dy = ((target.y - actor.y) / distance) * moveDistance;
       actor.x += dx;
@@ -181,7 +182,7 @@ function createAllyActor(unit: BenchUnit, ownedTotemIds: string[], index: number
     maxHealth: Math.round(health),
     attack: Math.round(attack),
     range: definition.range + (definition.role === 'ranged' ? 38 : 0),
-    speed: definition.role === 'skirmisher' ? 60 : definition.role === 'support' ? 30 : 42,
+    speed: definition.role === 'skirmisher' ? 68 : definition.role === 'support' ? 30 : 54,
     attackIntervalMs: definition.attackIntervalMs,
     cooldownRemainingMs: definition.attackIntervalMs * 0.35,
   };
@@ -199,8 +200,8 @@ function createEnemyActor(enemy: WaveEnemy, index: number): BattleActor {
     currentHealth: enemy.health,
     maxHealth: enemy.health,
     attack: enemy.attack,
-    range: 42,
-    speed: 34,
+    range: 48,
+    speed: 44,
     attackIntervalMs: 1180,
     cooldownRemainingMs: 280,
   };

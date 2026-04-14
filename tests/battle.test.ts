@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { simulateBattle } from '../src/game/core/battle';
+import { createBattleRuntime, simulateBattle, stepBattleRuntime } from '../src/game/core/battle';
 import {
   advanceAfterVictory,
   applyRewardChoice,
@@ -35,6 +35,22 @@ describe('simulateBattle', () => {
     expect(result.damageLog.length).toBeGreaterThan(0);
     expect(result.events.length).toBeGreaterThanOrEqual(2);
     expect(result.events[0]?.timestampMs).toBeGreaterThan(0);
+  });
+
+  it('resolves a single frontline duel in bounded realtime steps', () => {
+    const deployedState = assignBoardSlot(initialRunState, initialRunState.bench[0].instanceId, 0);
+    let runtime = createBattleRuntime({
+      alliedUnits: getDeployedUnits(deployedState),
+      enemyWaveId: 'wave-1',
+      ownedTotemIds: [],
+    });
+
+    for (let i = 0; i < 200 && runtime.status === 'ongoing'; i += 1) {
+      runtime = stepBattleRuntime(runtime, 100).state;
+    }
+
+    expect(runtime.status).toBe('victory');
+    expect(runtime.elapsedMs).toBeLessThan(12000);
   });
 });
 
