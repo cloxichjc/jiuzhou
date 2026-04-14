@@ -40,6 +40,10 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   private resolvingBattle = false;
   private runtimeState?: BattleRuntimeState;
 
+  constructor() {
+    super('JiuzhouBattleScene');
+  }
+
   preload(): void {
     preloadSharedAssets(this);
   }

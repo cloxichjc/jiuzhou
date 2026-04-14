@@ -96,8 +96,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private startTrial(): void {
-    this.cameras.main.fadeOut(220, 18, 12, 8);
-    this.time.delayedCall(240, () => this.scene.start('JiuzhouBattleScene', { freshRun: true }));
+    this.scene.start('JiuzhouBattleScene', { freshRun: true });
   }
 
   private showRoster(): void {

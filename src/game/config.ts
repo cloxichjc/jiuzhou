@@ -3,7 +3,7 @@ import { TitleScene } from './scenes/TitleScene';
 import { JiuzhouBattleScene } from './scenes/JiuzhouBattleScene';
 
 export const phaserConfig: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
+  type: Phaser.CANVAS,
   parent: 'app',
   width: 390,
   height: 844,
