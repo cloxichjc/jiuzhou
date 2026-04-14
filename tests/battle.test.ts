@@ -11,9 +11,16 @@ import {
 
 describe('simulateBattle', () => {
   it('lets a simple tribe squad defeat the first wave and keep survivors', () => {
+    const expandedState = applyRewardChoice(initialRunState, {
+      kind: 'economy',
+      id: 'population-2',
+      label: '扩充人口',
+      description: '人口上限 +1，金币 +20。',
+    });
+
     const deployedState = assignBoardSlot(
-      assignBoardSlot(initialRunState, initialRunState.bench[0].instanceId, 0),
-      initialRunState.bench[1].instanceId,
+      assignBoardSlot(expandedState, expandedState.bench[0].instanceId, 0),
+      expandedState.bench[1].instanceId,
       1
     );
 
@@ -26,6 +33,8 @@ describe('simulateBattle', () => {
     expect(result.outcome).toBe('victory');
     expect(result.remainingHealth).toBeGreaterThan(0);
     expect(result.damageLog.length).toBeGreaterThan(0);
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0]?.timestampMs).toBe(0);
   });
 });
 

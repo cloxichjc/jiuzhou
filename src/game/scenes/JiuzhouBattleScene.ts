@@ -8,7 +8,7 @@ import { buildBenchCardModel } from '../ui/bench';
 import { buildUnitCardLines } from '../ui/card-modal';
 import { createHud, updateHud, type HudRefs } from '../ui/hud';
 import { buildRewardPanelModel } from '../ui/reward-panel';
-import type { BenchUnit, RewardChoice, RunState } from '../types';
+import type { BattleEvent, BattleSimulationResult, BenchUnit, RewardChoice, RunState } from '../types';
 
 interface SlotAnchor {
   x: number;
@@ -28,12 +28,14 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   private hud?: HudRefs;
   private battleLayer?: Phaser.GameObjects.Container;
   private benchLayer?: Phaser.GameObjects.Container;
+  private effectsLayer?: Phaser.GameObjects.Container;
   private overlayLayer?: Phaser.GameObjects.Container;
   private battleInfo?: Phaser.GameObjects.Text;
   private enemyInfo?: Phaser.GameObjects.Text;
   private recruitButton?: Phaser.GameObjects.Container;
   private startButton?: Phaser.GameObjects.Container;
   private recruitCursor = 0;
+  private resolvingBattle = false;
 
   preload(): void {
     this.load.image('ground', '/art/frost-ground.svg');
@@ -56,6 +58,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.drawBackdrop();
     this.battleLayer = this.add.container(0, 0);
     this.benchLayer = this.add.container(0, 0);
+    this.effectsLayer = this.add.container(0, 0);
     this.hud = createHud(this, this.state);
     this.createInfoText();
     this.createButtons();
@@ -67,6 +70,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.add.image(195, 104, 'panel-header').setDisplaySize(360, 154);
     this.add.rectangle(195, 368, 332, 444, 0x000000, 0.06).setStrokeStyle(4, 0x725436, 0.65);
     this.add.image(195, 745, 'panel-bench').setDisplaySize(360, 168);
+    this.add.rectangle(195, 621, 328, 62, 0xf4e6c9, 0.88).setStrokeStyle(2, 0x82603c, 0.7);
     this.add.text(270, 138, '殇州试炼', {
       color: '#765635',
       fontFamily: 'Microsoft YaHei',
@@ -85,7 +89,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.battleInfo = this.add.text(36, 608, '', {
       color: '#6c4d2c',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '15px',
+      fontSize: '14px',
       wordWrap: { width: 318 },
     });
   }
@@ -135,10 +139,10 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
   private refreshWaveInfo(message?: string): void {
     const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
-    this.enemyInfo?.setText(`当前目标：${wave?.title ?? '试炼凯旋'}`);
+    this.enemyInfo?.setText(`当前目标：${wave?.title ?? '试炼凯旋'}${wave ? `  ·  敌势 ${wave.powerScore}` : ''}`);
     if (message) {
       this.battleInfo?.setText(message);
-    } else if (!this.battleInfo?.text) {
+    } else {
       this.battleInfo?.setText(chapter.backdrop);
     }
   }
@@ -152,6 +156,13 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     const boardFrame = this.add.rectangle(195, 368, 316, 408, 0xf3ead3, 0.08);
     boardFrame.setStrokeStyle(3, 0x8e6b42, 0.75);
     this.battleLayer.add(boardFrame);
+    const boardTitle = this.add.text(136, 176, '北陆战桌', {
+      color: '#71512d',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '16px',
+      fontStyle: 'bold',
+    });
+    this.battleLayer.add(boardTitle);
 
     BOARD_SLOT_POSITIONS.forEach((slot, index) => {
       const slotSkin = this.add.image(slot.x, slot.y, 'slot-stone').setDisplaySize(58, 58);
@@ -259,14 +270,24 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
     container.on('pointerdown', () => this.showCard(benchUnit));
     container.on('dragstart', () => {
+      if (this.resolvingBattle || this.overlayLayer) {
+        return;
+      }
       container.setDepth(40);
       container.setScale(1.06);
     });
     container.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+      if (this.resolvingBattle || this.overlayLayer) {
+        return;
+      }
       container.x = dragX;
       container.y = dragY;
     });
     container.on('dragend', (pointer: Phaser.Input.Pointer) => {
+      if (this.resolvingBattle || this.overlayLayer) {
+        this.refreshScene();
+        return;
+      }
       container.setDepth(0);
       container.setScale(1);
       const targetSlotIndex = this.findHoveredSlot(pointer.x, pointer.y);
@@ -313,7 +334,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   }
 
   private runBattle(): void {
-    if (this.overlayLayer) {
+    if (this.overlayLayer || this.resolvingBattle) {
       return;
     }
 
@@ -335,18 +356,14 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       ownedTotemIds: this.state.ownedTotemIds,
     });
 
+    this.resolvingBattle = true;
     this.state = {
       ...this.state,
       usedPopulation: deployed.length,
       health: result.outcome === 'victory' ? this.state.health : result.remainingHealth,
     };
-
-    if (result.outcome === 'victory') {
-      this.state = advanceAfterVictory(this.state);
-      this.showRewards(`${result.waveLabel} 已击破。${result.damageLog.join('  ')}`);
-    } else {
-      this.refreshScene(`${result.waveLabel} 失利。${result.damageLog.join('  ')}`);
-    }
+    this.refreshScene(`战团冲阵中。${result.damageLog.join('  ')}`);
+    this.playBattleSequence(result, deployed);
   }
 
   private showRewards(resultMessage: string): void {
@@ -468,12 +485,123 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
   private refreshButtonState(): void {
     const deployedCount = getDeployedUnits(this.state).length;
-    this.startButton?.setAlpha(deployedCount > 0 && !this.overlayLayer ? 1 : 0.65);
-    this.recruitButton?.setAlpha(this.state.gold >= RECRUIT_COST && !this.overlayLayer ? 1 : 0.7);
+    this.startButton?.setAlpha(deployedCount > 0 && !this.overlayLayer && !this.resolvingBattle ? 1 : 0.65);
+    this.recruitButton?.setAlpha(this.state.gold >= RECRUIT_COST && !this.overlayLayer && !this.resolvingBattle ? 1 : 0.7);
   }
 
   private clearOverlay(): void {
     this.overlayLayer?.destroy(true);
     this.overlayLayer = undefined;
+  }
+
+  private playBattleSequence(result: BattleSimulationResult, deployed: BenchUnit[]): void {
+    this.effectsLayer?.removeAll(true);
+    const enemyAnchors = this.getEnemyAnchors(result);
+
+    result.events.forEach((event, index) => {
+      this.time.delayedCall(event.timestampMs, () => {
+        this.spawnBattleEventFx(event, enemyAnchors[index % enemyAnchors.length]);
+      });
+    });
+
+    const finishAt = (result.events.at(-1)?.timestampMs ?? 0) + 900;
+    this.time.delayedCall(finishAt, () => {
+      this.showResultBanner(result.outcome, deployed.length);
+      if (result.outcome === 'victory') {
+        this.state = advanceAfterVictory(this.state);
+        this.resolvingBattle = false;
+        this.showRewards(`${result.waveLabel} 已击破。敌势 ${result.enemyPower.toFixed(0)}，我方战势 ${result.alliedPower.toFixed(0)}。`);
+      } else {
+        this.resolvingBattle = false;
+        this.refreshScene(`${result.waveLabel} 失利。敌势 ${result.enemyPower.toFixed(0)}，我方战势 ${result.alliedPower.toFixed(0)}。`);
+      }
+    });
+  }
+
+  private spawnBattleEventFx(event: BattleEvent, target: SlotAnchor): void {
+    if (!this.effectsLayer) {
+      return;
+    }
+
+    const actorSlotIndex = this.state.boardSlots.findIndex((slotId) => slotId === event.actorId);
+    const actorAnchor = actorSlotIndex >= 0 ? BOARD_SLOT_POSITIONS[actorSlotIndex] : BOARD_SLOT_POSITIONS[0];
+    const tint = event.kind === 'spell' ? 0x9dd3ff : event.kind === 'projectile' ? 0xe9c074 : 0xdc7b58;
+    const projectile = this.add.circle(actorAnchor.x, actorAnchor.y, event.kind === 'melee' ? 7 : 5, tint, 0.95);
+    const trail = this.add.rectangle(
+      (actorAnchor.x + target.x) / 2,
+      (actorAnchor.y + target.y) / 2,
+      Math.max(18, Phaser.Math.Distance.Between(actorAnchor.x, actorAnchor.y, target.x, target.y) - 18),
+      event.kind === 'spell' ? 6 : 4,
+      tint,
+      0.18
+    );
+    trail.rotation = Phaser.Math.Angle.Between(actorAnchor.x, actorAnchor.y, target.x, target.y);
+    this.effectsLayer.add([trail, projectile]);
+
+    this.tweens.add({
+      targets: projectile,
+      x: target.x,
+      y: target.y,
+      duration: event.kind === 'melee' ? 160 : 220,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        const burst = this.add.circle(target.x, target.y, 10, tint, 0.4);
+        const damage = this.add.text(target.x - 10, target.y - 14, `${event.amount}`, {
+          color: '#fff4d7',
+          stroke: '#66391f',
+          strokeThickness: 3,
+          fontFamily: 'Microsoft YaHei',
+          fontSize: '18px',
+          fontStyle: 'bold',
+        });
+        this.effectsLayer?.add([burst, damage]);
+        this.cameras.main.shake(90, 0.0025);
+        this.tweens.add({
+          targets: [burst, damage],
+          y: '-=22',
+          alpha: 0,
+          duration: 420,
+          onComplete: () => {
+            burst.destroy();
+            damage.destroy();
+          },
+        });
+        projectile.destroy();
+        trail.destroy();
+      },
+    });
+  }
+
+  private showResultBanner(outcome: BattleSimulationResult['outcome'], deployedCount: number): void {
+    if (!this.effectsLayer) {
+      return;
+    }
+    const banner = this.add.rectangle(195, 212, 220, 44, outcome === 'victory' ? 0x7f4a2a : 0x553737, 0.95);
+    banner.setStrokeStyle(2, 0xf0dbb7);
+    const text = this.add.text(128, 196, outcome === 'victory' ? `破阵 · ${deployedCount}骑突入` : '折戟 · 战团受挫', {
+      color: '#fff0d9',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '20px',
+      fontStyle: 'bold',
+    });
+    this.effectsLayer.add([banner, text]);
+    this.tweens.add({
+      targets: [banner, text],
+      alpha: 0,
+      delay: 360,
+      duration: 620,
+      onComplete: () => {
+        banner.destroy();
+        text.destroy();
+      },
+    });
+  }
+
+  private getEnemyAnchors(result: BattleSimulationResult): SlotAnchor[] {
+    const count = Math.max(1, result.events.length);
+    return Array.from({ length: count }, (_, index) => ({
+      x: 96 + (index % 3) * 96,
+      y: 258,
+    }));
   }
 }

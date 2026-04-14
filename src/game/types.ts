@@ -68,11 +68,23 @@ export interface BattleSimulationInput {
   ownedTotemIds: string[];
 }
 
+export interface BattleEvent {
+  actorId: string;
+  actorName: string;
+  targetName: string;
+  amount: number;
+  kind: 'melee' | 'spell' | 'projectile';
+  timestampMs: number;
+}
+
 export interface BattleSimulationResult {
   outcome: 'victory' | 'defeat';
   remainingHealth: number;
   damageLog: string[];
   waveLabel: string;
+  alliedPower: number;
+  enemyPower: number;
+  events: BattleEvent[];
 }
 
 export interface RunState {
