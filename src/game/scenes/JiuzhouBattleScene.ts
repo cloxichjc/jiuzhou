@@ -43,7 +43,11 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.load.image('board-shangzhou', '/art/board-shangzhou.svg');
     this.load.image('panel-header', '/art/panel-header.svg');
     this.load.image('panel-bench', '/art/panel-bench.svg');
+    this.load.image('panel-detail', '/art/panel-detail.svg');
+    this.load.image('panel-reward', '/art/panel-reward.svg');
     this.load.image('card-unit', '/art/card-unit.svg');
+    this.load.image('card-reward', '/art/card-reward.svg');
+    this.load.image('card-bench-compact', '/art/card-bench-compact.svg');
     this.load.image('button-lacquer', '/art/button-lacquer.svg');
     this.load.image('slot-stone', '/art/slot-stone.svg');
     this.load.image('unit-axe-warrior', '/art/unit-axe-warrior.svg');
@@ -292,6 +296,13 @@ export class JiuzhouBattleScene extends Phaser.Scene {
         fontStyle: 'bold',
       })
     );
+    this.benchLayer.add(
+      this.add.text(34, 704, '拖拽上阵，轻点看详情', {
+        color: '#8b6a45',
+        fontFamily: 'Microsoft YaHei',
+        fontSize: '12px',
+      })
+    );
 
     this.state.bench.slice(0, 6).forEach((benchUnit, index) => {
       const card = this.createBenchCard(benchUnit, index);
@@ -303,32 +314,40 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     const model = buildBenchCardModel(benchUnit);
     const column = index % 3;
     const row = Math.floor(index / 3);
-    const originX = 62 + column * 78;
-    const originY = 724 + row * 68;
+    const originX = 58 + column * 78;
+    const originY = 736 + row * 68;
     const deployed = this.state.boardSlots.includes(benchUnit.instanceId);
 
     const container = this.add.container(originX, originY);
-    const frame = this.add.image(0, 0, 'card-unit').setDisplaySize(64, 82);
-    const icon = this.add.image(0, -14, model.artKey).setDisplaySize(32, 32);
-    const title = this.add.text(-20, 12, model.title.slice(0, 4), {
+    const frame = this.add.image(0, 0, 'card-bench-compact').setDisplaySize(72, 94);
+    const icon = this.add.image(0, -18, model.artKey).setDisplaySize(34, 34);
+    const star = this.add.text(20, -36, `${model.star}★`, {
+      color: '#fff1d7',
+      backgroundColor: '#7b5431',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '9px',
+      padding: { left: 4, right: 4, top: 2, bottom: 2 },
+    });
+    const title = this.add.text(-22, 8, model.title.slice(0, 4), {
       color: '#2e1e11',
       fontFamily: 'Microsoft YaHei',
       fontSize: '12px',
+      fontStyle: 'bold',
     });
-    const sub = this.add.text(-20, 26, model.subtitle, {
-      color: '#866441',
+    const sub = this.add.text(-22, 22, model.roleText, {
+      color: '#7a5a38',
       fontFamily: 'Microsoft YaHei',
       fontSize: '8px',
     });
-    const chip = this.add.text(-20, 40, deployed ? '已上阵' : model.skillName, {
-      color: deployed ? '#f4eadb' : '#6d4d2a',
-      backgroundColor: deployed ? '#7f4831' : '#dbc198',
+    const chip = this.add.text(-22, 36, deployed ? '已上阵' : model.tagText, {
+      color: deployed ? '#f4eadb' : '#624325',
+      backgroundColor: deployed ? '#6f7f4b' : '#e6d1ad',
       fontFamily: 'Microsoft YaHei',
       fontSize: '8px',
       padding: { left: 3, right: 3, top: 2, bottom: 2 },
     });
-    container.add([frame, icon, title, sub, chip]);
-    container.setSize(64, 82);
+    container.add([frame, icon, star, title, sub, chip]);
+    container.setSize(72, 94);
     container.setInteractive({ draggable: true, useHandCursor: true });
     this.input.setDraggable(container);
 
@@ -452,56 +471,55 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     const overlay = this.add.container(24, 188);
     overlay.setDepth(60);
     const shade = this.add.rectangle(171, 188, 342, 380, 0x140f0b, 0.36);
-    const panel = this.add.rectangle(171, 188, 338, 376, 0xf7ebd2);
-    panel.setStrokeStyle(3, 0x6d4e31);
-    const title = this.add.text(106, 28, model.title, {
+    const panel = this.add.image(186, 196, 'panel-reward').setDisplaySize(344, 392);
+    const title = this.add.text(112, 32, model.title, {
       color: '#2d2115',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '28px',
+      fontSize: '26px',
       fontStyle: 'bold',
     });
     const subtitle = this.add.text(22, 64, model.subtitle, {
       color: '#6f5235',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '15px',
+      fontSize: '14px',
       wordWrap: { width: 300 },
     });
 
     overlay.add([shade, panel, title, subtitle]);
     model.choices.forEach((choice, index) => {
-      overlay.add(this.createRewardCard(choice, 18 + index * 106, 118));
+      overlay.add(this.createRewardCard(choice, 18 + index * 106, 120));
     });
     this.overlayLayer = overlay;
   }
 
-  private createRewardCard(choice: RewardChoice & { artKey?: string; chipText?: string }, x: number, y: number): Phaser.GameObjects.Container {
+  private createRewardCard(choice: RewardChoice & { artKey?: string; chipText?: string; theme?: string }, x: number, y: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
-    const panel = this.add.rectangle(48, 92, 96, 184, 0xebd8b5);
-    panel.setStrokeStyle(2, 0x6d4e31);
-    const icon = this.add.image(48, 40, choice.artKey ?? 'button-lacquer').setDisplaySize(50, 50);
-    const title = this.add.text(14, 76, choice.label, {
+    const frame = this.add.image(48, 94, 'card-reward').setDisplaySize(98, 188);
+    const glow = this.add.rectangle(48, 94, 98, 188, choice.theme === 'totem' ? 0x6d8f7d : choice.theme === 'economy' ? 0x8f6a46 : 0x7f5c39, 0.08);
+    const icon = this.add.image(48, 42, choice.artKey ?? 'button-lacquer').setDisplaySize(46, 46);
+    const title = this.add.text(12, 78, choice.label, {
       color: '#2d2115',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '17px',
+      fontSize: '16px',
       fontStyle: 'bold',
-      wordWrap: { width: 68 },
+      wordWrap: { width: 72 },
       align: 'center',
     });
-    const chip = this.add.text(14, 122, choice.chipText ?? choice.kind, {
+    const chip = this.add.text(14, 118, choice.chipText ?? choice.kind, {
       color: '#f7ebd2',
-      backgroundColor: '#7d4d2e',
+      backgroundColor: choice.theme === 'totem' ? '#476b58' : choice.theme === 'economy' ? '#8a6137' : '#7d4d2e',
       fontFamily: 'Microsoft YaHei',
       fontSize: '10px',
       padding: { left: 4, right: 4, top: 2, bottom: 2 },
     });
-    const desc = this.add.text(14, 148, choice.description, {
+    const desc = this.add.text(12, 146, choice.description, {
       color: '#6b4c2c',
       fontFamily: 'Microsoft YaHei',
       fontSize: '11px',
-      wordWrap: { width: 68 },
+      wordWrap: { width: 72 },
     });
-    panel.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.pickReward(choice));
-    container.add([panel, icon, title, chip, desc]);
+    frame.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.pickReward(choice));
+    container.add([glow, frame, icon, title, chip, desc]);
     return container;
   }
 
@@ -518,32 +536,51 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     const overlay = this.add.container(38, 172);
     overlay.setDepth(70);
     const shade = this.add.rectangle(157, 178, 314, 356, 0x18120d, 0.32);
-    const panel = this.add.rectangle(157, 178, 298, 332, 0xf8edd6);
-    panel.setStrokeStyle(3, 0x6d4e31);
-    const icon = this.add.image(62, 72, `unit-${unit.unitId}`).setDisplaySize(78, 78);
+    const panel = this.add.image(158, 182, 'panel-detail').setDisplaySize(304, 348);
+    const icon = this.add.image(74, 74, `unit-${unit.unitId}`).setDisplaySize(84, 84);
     const lines = buildUnitCardLines(unit.unitId, unit.star);
-    const title = this.add.text(116, 36, lines[0], {
+    const title = this.add.text(136, 40, lines[0], {
       color: '#2d2115',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '24px',
+      fontSize: '22px',
       fontStyle: 'bold',
     });
-    const stats = this.add.text(116, 82, lines[1], {
+    const stats = this.add.text(136, 84, lines[1], {
       color: '#5a4128',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '15px',
+      fontSize: '14px',
       wordWrap: { width: 152 },
     });
-    const skill = this.add.text(34, 152, lines[2], {
+    const skillTag = this.add.text(34, 156, '技能', {
+      color: '#f7ecd6',
+      backgroundColor: '#7b5431',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '11px',
+      padding: { left: 6, right: 6, top: 3, bottom: 3 },
+    });
+    const skill = this.add.text(34, 182, lines[2], {
       color: '#714d2d',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
+      fontSize: '15px',
       wordWrap: { width: 244 },
     });
-    const lore = this.add.text(34, 230, lines[3], {
+    const roleTag = this.add.text(34, 244, '定位', {
+      color: '#f7ecd6',
+      backgroundColor: '#556e4b',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '11px',
+      padding: { left: 6, right: 6, top: 3, bottom: 3 },
+    });
+    const roleText = this.add.text(34, 270, lines[4], {
+      color: '#5a4128',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '14px',
+      wordWrap: { width: 244 },
+    });
+    const lore = this.add.text(34, 316, lines[3], {
       color: '#8a6742',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '15px',
+      fontSize: '14px',
       wordWrap: { width: 244 },
     });
     const close = this.add.text(238, 24, '关闭', {
@@ -552,7 +589,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       fontSize: '18px',
     });
     close.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.clearOverlay());
-    overlay.add([shade, panel, icon, title, stats, skill, lore, close]);
+    overlay.add([shade, panel, icon, title, stats, skillTag, skill, roleTag, roleText, lore, close]);
     this.overlayLayer = overlay;
   }
 

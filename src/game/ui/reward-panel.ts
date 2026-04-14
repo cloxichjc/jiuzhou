@@ -5,6 +5,7 @@ import type { RewardChoice } from '../types';
 export interface RewardVisualChoice extends RewardChoice {
   artKey: string;
   chipText: string;
+  theme: 'unit' | 'totem' | 'economy';
 }
 
 export interface RewardPanelModel {
@@ -32,6 +33,7 @@ function toVisualChoice(choice: RewardChoice): RewardVisualChoice {
       ...choice,
       artKey: `unit-${choice.id}`,
       chipText: unit.skillName,
+      theme: 'unit',
     };
   }
 
@@ -41,6 +43,7 @@ function toVisualChoice(choice: RewardChoice): RewardVisualChoice {
       ...choice,
       artKey: `totem-${choice.id}`,
       chipText: totem.name,
+      theme: 'totem',
     };
   }
 
@@ -48,5 +51,6 @@ function toVisualChoice(choice: RewardChoice): RewardVisualChoice {
     ...choice,
     artKey: 'button-lacquer',
     chipText: '军资',
+    theme: 'economy',
   };
 }

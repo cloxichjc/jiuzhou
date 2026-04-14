@@ -9,6 +9,8 @@ export interface BenchCardModel {
   subtitle: string;
   skillName: string;
   artKey: string;
+  roleText: string;
+  tagText: string;
 }
 
 export function buildBenchCardModel(benchUnit: BenchUnit): BenchCardModel {
@@ -21,6 +23,8 @@ export function buildBenchCardModel(benchUnit: BenchUnit): BenchCardModel {
     subtitle: `${roleLabel(unit.role)} · ${benchUnit.star}星`,
     skillName: unit.skillName,
     artKey: `unit-${benchUnit.unitId}`,
+    roleText: roleLabel(unit.role),
+    tagText: unit.skillName,
   };
 }
 

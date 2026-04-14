@@ -7,6 +7,10 @@ export function buildUnitCardLines(unitId: string, star = 1): string[] {
     `攻击 ${Math.round(unit.attack * star)} / 生命 ${Math.round(unit.health * (1 + (star - 1) * 0.7))}`,
     `${unit.skillName}：${unit.skillText}`,
     flavorText(unitId),
+    unit.role === 'frontline' ? '定位：顶住敌阵，承担正面接敌。'
+      : unit.role === 'support' ? '定位：后排施术，削弱敌势。'
+      : unit.role === 'ranged' ? '定位：保持距离，穿透压制。'
+      : '定位：高速突入，优先抢节奏。',
   ];
 }
 
