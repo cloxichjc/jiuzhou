@@ -48,6 +48,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.load.image('card-unit', '/art/card-unit.svg');
     this.load.image('card-reward', '/art/card-reward.svg');
     this.load.image('card-bench-compact', '/art/card-bench-compact.svg');
+    this.load.image('hud-pill', '/art/hud-pill.svg');
     this.load.image('button-lacquer', '/art/button-lacquer.svg');
     this.load.image('slot-stone', '/art/slot-stone.svg');
     this.load.image('unit-axe-warrior', '/art/unit-axe-warrior.svg');
@@ -94,6 +95,9 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   private drawBackdrop(): void {
     this.add.image(195, 422, 'ground').setDisplaySize(390, 844);
     this.add.image(195, 104, 'panel-header').setDisplaySize(360, 154);
+    this.add.image(78, 78, 'hud-pill').setDisplaySize(90, 30);
+    this.add.image(180, 78, 'hud-pill').setDisplaySize(90, 30);
+    this.add.image(288, 78, 'hud-pill').setDisplaySize(96, 30);
     this.add.image(195, 376, 'board-shangzhou').setDisplaySize(334, 446);
     this.add.image(195, 745, 'panel-bench').setDisplaySize(360, 168);
     this.add.rectangle(195, 621, 328, 62, 0xf4e6c9, 0.88).setStrokeStyle(2, 0x82603c, 0.7);
@@ -109,13 +113,13 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.enemyInfo = this.add.text(36, 578, '', {
       color: '#5c4127',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '18px',
+      fontSize: '15px',
       fontStyle: 'bold',
     });
     this.battleInfo = this.add.text(36, 608, '', {
       color: '#6c4d2c',
       fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
+      fontSize: '12px',
       wordWrap: { width: 318 },
     });
   }
@@ -138,10 +142,10 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   ): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
     const skin = this.add.image(0, 0, 'button-lacquer').setDisplaySize(width, height);
-    const text = this.add.text(-22, -14, label, {
+    const text = this.add.text(label.length > 2 ? -20 : -18, label.length > 2 ? -12 : -15, label, {
       color: textColor,
       fontFamily: 'Microsoft YaHei',
-      fontSize: label.length > 2 ? '22px' : '28px',
+      fontSize: label.length > 2 ? '20px' : '24px',
       fontStyle: 'bold',
     });
     skin.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
