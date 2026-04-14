@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { simulateBattle } from '../core/battle';
+import { createBattleRuntime, stepBattleRuntime, summarizeBattleRuntime } from '../core/battle';
 import { autoMergeRunState, applyRewardChoice, assignBoardSlot, clearBoardSlot, getDeployedUnits, advanceAfterVictory, initialRunState } from '../core/run-state';
 import { createBenchUnit, getBenchUnitOrThrow, getUnitDefinitionOrThrow } from '../core/helpers';
 import { chapter } from '../data/chapter';
@@ -8,7 +8,7 @@ import { buildBenchCardModel } from '../ui/bench';
 import { buildUnitCardLines } from '../ui/card-modal';
 import { createHud, updateHud, type HudRefs } from '../ui/hud';
 import { buildRewardPanelModel } from '../ui/reward-panel';
-import type { BattleEvent, BattleSimulationResult, BenchUnit, RewardChoice, RunState } from '../types';
+import type { BattleEvent, BattleRuntimeState, BattleSimulationResult, BenchUnit, RewardChoice, RunState } from '../types';
 
 interface SlotAnchor {
   x: number;
@@ -36,6 +36,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   private startButton?: Phaser.GameObjects.Container;
   private recruitCursor = 0;
   private resolvingBattle = false;
+  private runtimeState?: BattleRuntimeState;
 
   preload(): void {
     this.load.image('ground', '/art/frost-ground.svg');
@@ -63,6 +64,23 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.createInfoText();
     this.createButtons();
     this.refreshScene('拖拽战团卡牌到战场圆阵上阵。');
+  }
+
+  update(_time: number, delta: number): void {
+    if (!this.resolvingBattle || !this.runtimeState) {
+      return;
+    }
+
+    const step = stepBattleRuntime(this.runtimeState, Math.min(delta, 120));
+    this.runtimeState = step.state;
+    for (const event of step.events) {
+      this.spawnBattleEventFx(event);
+    }
+    this.refreshScene(`战团交锋中。历时 ${Math.round(this.runtimeState.elapsedMs / 100) / 10}s`);
+
+    if (this.runtimeState.status !== 'ongoing') {
+      this.finishRealtimeBattle();
+    }
   }
 
   private drawBackdrop(): void {
@@ -164,6 +182,11 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     });
     this.battleLayer.add(boardTitle);
 
+    if (this.resolvingBattle && this.runtimeState) {
+      this.renderRuntimeBattlefield();
+      return;
+    }
+
     BOARD_SLOT_POSITIONS.forEach((slot, index) => {
       const slotSkin = this.add.image(slot.x, slot.y, 'slot-stone').setDisplaySize(58, 58);
       slotSkin.setAlpha(index < this.state.population ? 1 : 0.35);
@@ -212,6 +235,35 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       });
       this.battleLayer?.add([enemyCircle, enemyText]);
     });
+  }
+
+  private renderRuntimeBattlefield(): void {
+    if (!this.battleLayer || !this.runtimeState) {
+      return;
+    }
+
+    for (const actor of this.runtimeState.actors) {
+      if (actor.currentHealth <= 0) {
+        continue;
+      }
+
+      const isAlly = actor.team === 'ally';
+      const fillColor = isAlly ? 0x5d7f50 : 0x7b4a42;
+      const spriteKey = isAlly && actor.unitId ? `unit-${actor.unitId}` : undefined;
+      const token = spriteKey
+        ? this.add.image(actor.x, actor.y, spriteKey).setDisplaySize(48, 48)
+        : this.add.circle(actor.x, actor.y, 23, fillColor, 0.94);
+      const hpRatio = actor.currentHealth / actor.maxHealth;
+      const hpBg = this.add.rectangle(actor.x, actor.y - 32, 40, 5, 0x2c2015, 0.8);
+      const hpFg = this.add.rectangle(actor.x - 20 + 40 * hpRatio / 2, actor.y - 32, 40 * hpRatio, 5, isAlly ? 0x9cc36f : 0xd77a68);
+      const name = this.add.text(actor.x - 24, actor.y + 26, actor.name.slice(0, 4), {
+        color: '#f8f1e3',
+        fontFamily: 'Microsoft YaHei',
+        fontSize: '11px',
+        backgroundColor: isAlly ? '#4a5d33' : '#5e4127',
+      });
+      this.battleLayer.add([token, hpBg, hpFg, name]);
+    }
   }
 
   private refreshBench(): void {
@@ -263,15 +315,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       fontSize: '9px',
       padding: { left: 4, right: 4, top: 2, bottom: 2 },
     });
-    const infoHint = this.add.text(14, -44, '详', {
-      color: '#f8ecd7',
-      backgroundColor: '#7c4a2f',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '10px',
-      padding: { left: 4, right: 4, top: 2, bottom: 2 },
-    });
     container.add([frame, icon, title, sub, chip]);
-    container.add(infoHint);
     container.setSize(72, 96);
     container.setInteractive({ draggable: true, useHandCursor: true });
     this.input.setDraggable(container);
@@ -311,15 +355,12 @@ export class JiuzhouBattleScene extends Phaser.Scene {
         this.refreshScene();
       }
     });
-    container.on('pointerup', (_pointer: Phaser.Input.Pointer, localX: number, localY: number) => {
+    container.on('pointerup', () => {
       if (this.resolvingBattle || this.overlayLayer || didDrag) {
         return;
       }
-      if (localX > 46 && localY < 18) {
-        this.showCard(benchUnit);
-      }
+      this.showCard(benchUnit);
     });
-
     return container;
   }
 
@@ -371,7 +412,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       return;
     }
 
-    const result = simulateBattle({
+    this.runtimeState = createBattleRuntime({
       alliedUnits: deployed,
       enemyWaveId: wave.id,
       ownedTotemIds: this.state.ownedTotemIds,
@@ -381,10 +422,9 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.state = {
       ...this.state,
       usedPopulation: deployed.length,
-      health: result.outcome === 'victory' ? this.state.health : result.remainingHealth,
     };
-    this.refreshScene(`战团冲阵中。${result.damageLog.join('  ')}`);
-    this.playBattleSequence(result, deployed);
+    this.effectsLayer?.removeAll(true);
+    this.refreshScene(`战团冲阵中。第 ${this.state.waveNumber} 波正在实时结算。`);
   }
 
   private showRewards(resultMessage: string): void {
@@ -515,59 +555,33 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.overlayLayer = undefined;
   }
 
-  private playBattleSequence(result: BattleSimulationResult, deployed: BenchUnit[]): void {
-    this.effectsLayer?.removeAll(true);
-    const enemyAnchors = this.getEnemyAnchors(result);
-
-    result.events.forEach((event, index) => {
-      this.time.delayedCall(event.timestampMs, () => {
-        this.spawnBattleEventFx(event, enemyAnchors[index % enemyAnchors.length]);
-      });
-    });
-
-    const finishAt = (result.events.at(-1)?.timestampMs ?? 0) + 900;
-    this.time.delayedCall(finishAt, () => {
-      this.showResultBanner(result.outcome, deployed.length);
-      if (result.outcome === 'victory') {
-        this.state = advanceAfterVictory(this.state);
-        this.resolvingBattle = false;
-        this.showRewards(`${result.waveLabel} 已击破。敌势 ${result.enemyPower.toFixed(0)}，我方战势 ${result.alliedPower.toFixed(0)}。`);
-      } else {
-        this.resolvingBattle = false;
-        this.refreshScene(`${result.waveLabel} 失利。敌势 ${result.enemyPower.toFixed(0)}，我方战势 ${result.alliedPower.toFixed(0)}。`);
-      }
-    });
-  }
-
-  private spawnBattleEventFx(event: BattleEvent, target: SlotAnchor): void {
+  private spawnBattleEventFx(event: BattleEvent): void {
     if (!this.effectsLayer) {
       return;
     }
 
-    const actorSlotIndex = this.state.boardSlots.findIndex((slotId) => slotId === event.actorId);
-    const actorAnchor = actorSlotIndex >= 0 ? BOARD_SLOT_POSITIONS[actorSlotIndex] : BOARD_SLOT_POSITIONS[0];
     const tint = event.kind === 'spell' ? 0x9dd3ff : event.kind === 'projectile' ? 0xe9c074 : 0xdc7b58;
-    const projectile = this.add.circle(actorAnchor.x, actorAnchor.y, event.kind === 'melee' ? 7 : 5, tint, 0.95);
+    const projectile = this.add.circle(event.fromX, event.fromY, event.kind === 'melee' ? 7 : 5, tint, 0.95);
     const trail = this.add.rectangle(
-      (actorAnchor.x + target.x) / 2,
-      (actorAnchor.y + target.y) / 2,
-      Math.max(18, Phaser.Math.Distance.Between(actorAnchor.x, actorAnchor.y, target.x, target.y) - 18),
+      (event.fromX + event.toX) / 2,
+      (event.fromY + event.toY) / 2,
+      Math.max(18, Phaser.Math.Distance.Between(event.fromX, event.fromY, event.toX, event.toY) - 18),
       event.kind === 'spell' ? 6 : 4,
       tint,
       0.18
     );
-    trail.rotation = Phaser.Math.Angle.Between(actorAnchor.x, actorAnchor.y, target.x, target.y);
+    trail.rotation = Phaser.Math.Angle.Between(event.fromX, event.fromY, event.toX, event.toY);
     this.effectsLayer.add([trail, projectile]);
 
     this.tweens.add({
       targets: projectile,
-      x: target.x,
-      y: target.y,
+      x: event.toX,
+      y: event.toY,
       duration: event.kind === 'melee' ? 160 : 220,
       ease: 'Quad.easeOut',
       onComplete: () => {
-        const burst = this.add.circle(target.x, target.y, 10, tint, 0.4);
-        const damage = this.add.text(target.x - 10, target.y - 14, `${event.amount}`, {
+        const burst = this.add.circle(event.toX, event.toY, 10, tint, 0.4);
+        const damage = this.add.text(event.toX - 10, event.toY - 14, `${event.amount}`, {
           color: '#fff4d7',
           stroke: '#66391f',
           strokeThickness: 3,
@@ -618,11 +632,27 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     });
   }
 
-  private getEnemyAnchors(result: BattleSimulationResult): SlotAnchor[] {
-    const count = Math.max(1, result.events.length);
-    return Array.from({ length: count }, (_, index) => ({
-      x: 96 + (index % 3) * 96,
-      y: 258,
-    }));
+  private finishRealtimeBattle(): void {
+    if (!this.runtimeState) {
+      return;
+    }
+
+    const summary = summarizeBattleRuntime(this.runtimeState);
+    const deployedCount = this.runtimeState.actors.filter((actor) => actor.team === 'ally' && actor.currentHealth > 0).length;
+    this.showResultBanner(summary.outcome, Math.max(1, deployedCount));
+    this.resolvingBattle = false;
+    this.runtimeState = undefined;
+
+    if (summary.outcome === 'victory') {
+      this.state = advanceAfterVictory(this.state);
+      this.showRewards(`${summary.waveLabel} 已击破。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      health: summary.remainingHealth,
+    };
+    this.refreshScene(`${summary.waveLabel} 失利。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
   }
 }
