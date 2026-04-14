@@ -263,16 +263,29 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       fontSize: '9px',
       padding: { left: 4, right: 4, top: 2, bottom: 2 },
     });
+    const infoHint = this.add.text(14, -44, '详', {
+      color: '#f8ecd7',
+      backgroundColor: '#7c4a2f',
+      fontFamily: 'Microsoft YaHei',
+      fontSize: '10px',
+      padding: { left: 4, right: 4, top: 2, bottom: 2 },
+    });
     container.add([frame, icon, title, sub, chip]);
+    container.add(infoHint);
     container.setSize(72, 96);
     container.setInteractive({ draggable: true, useHandCursor: true });
     this.input.setDraggable(container);
 
-    container.on('pointerdown', () => this.showCard(benchUnit));
+    let didDrag = false;
+
+    container.on('pointerdown', () => {
+      didDrag = false;
+    });
     container.on('dragstart', () => {
       if (this.resolvingBattle || this.overlayLayer) {
         return;
       }
+      didDrag = true;
       container.setDepth(40);
       container.setScale(1.06);
     });
@@ -296,6 +309,14 @@ export class JiuzhouBattleScene extends Phaser.Scene {
         this.refreshScene(`已将 ${model.title} 布置到第 ${targetSlotIndex + 1} 格。`);
       } else {
         this.refreshScene();
+      }
+    });
+    container.on('pointerup', (_pointer: Phaser.Input.Pointer, localX: number, localY: number) => {
+      if (this.resolvingBattle || this.overlayLayer || didDrag) {
+        return;
+      }
+      if (localX > 46 && localY < 18) {
+        this.showCard(benchUnit);
       }
     });
 
@@ -403,29 +424,29 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
   private createRewardCard(choice: RewardChoice & { artKey?: string; chipText?: string }, x: number, y: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
-    const panel = this.add.rectangle(46, 92, 96, 184, 0xebd8b5);
-    panel.setOrigin(0);
+    const panel = this.add.rectangle(48, 92, 96, 184, 0xebd8b5);
     panel.setStrokeStyle(2, 0x6d4e31);
-    const icon = this.add.image(94, 40, choice.artKey ?? 'button-lacquer').setDisplaySize(50, 50);
-    const title = this.add.text(18, 76, choice.label, {
+    const icon = this.add.image(48, 40, choice.artKey ?? 'button-lacquer').setDisplaySize(50, 50);
+    const title = this.add.text(14, 76, choice.label, {
       color: '#2d2115',
       fontFamily: 'Microsoft YaHei',
       fontSize: '17px',
       fontStyle: 'bold',
-      wordWrap: { width: 56 },
+      wordWrap: { width: 68 },
+      align: 'center',
     });
-    const chip = this.add.text(18, 120, choice.chipText ?? choice.kind, {
+    const chip = this.add.text(14, 122, choice.chipText ?? choice.kind, {
       color: '#f7ebd2',
       backgroundColor: '#7d4d2e',
       fontFamily: 'Microsoft YaHei',
       fontSize: '10px',
       padding: { left: 4, right: 4, top: 2, bottom: 2 },
     });
-    const desc = this.add.text(18, 146, choice.description, {
+    const desc = this.add.text(14, 148, choice.description, {
       color: '#6b4c2c',
       fontFamily: 'Microsoft YaHei',
       fontSize: '11px',
-      wordWrap: { width: 56 },
+      wordWrap: { width: 68 },
     });
     panel.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.pickReward(choice));
     container.add([panel, icon, title, chip, desc]);
