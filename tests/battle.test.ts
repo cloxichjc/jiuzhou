@@ -87,6 +87,30 @@ describe('simulateBattle', () => {
 
     expect(result.events.some((event) => event.effect === 'slow' || event.effect === 'charge' || event.effect === 'crit')).toBe(true);
   });
+
+  it('applies slow effects into runtime actor state', () => {
+    const expandedState = applyRewardChoice(initialRunState, {
+      kind: 'economy',
+      id: 'population-2',
+      label: '扩充人口',
+      description: '人口上限 +1，金币 +20。',
+    });
+    const staged = assignBoardSlot(expandedState, expandedState.bench[1].instanceId, 0);
+    let runtime = createBattleRuntime({
+      alliedUnits: getDeployedUnits(staged),
+      enemyWaveId: 'wave-1',
+      ownedTotemIds: [],
+    });
+
+    for (let i = 0; i < 80 && runtime.status === 'ongoing'; i += 1) {
+      runtime = stepBattleRuntime(runtime, 100).state;
+      if (runtime.actors.some((actor) => actor.team === 'enemy' && (actor.slowUntilMs ?? 0) > runtime.elapsedMs)) {
+        break;
+      }
+    }
+
+    expect(runtime.actors.some((actor) => actor.team === 'enemy' && (actor.slowUntilMs ?? 0) > runtime.elapsedMs)).toBe(true);
+  });
 });
 
 describe('run-state loop', () => {

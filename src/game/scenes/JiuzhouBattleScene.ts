@@ -157,7 +157,10 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
   private refreshWaveInfo(message?: string): void {
     const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
-    this.enemyInfo?.setText(`当前目标：${wave?.title ?? '试炼凯旋'}${wave ? `  ·  敌势 ${wave.powerScore}` : ''}`);
+    const runtimeSummary = this.runtimeState
+      ? `  ·  敌余 ${this.runtimeState.actors.filter((actor) => actor.team === 'enemy' && actor.currentHealth > 0).length}  我方 ${this.runtimeState.actors.filter((actor) => actor.team === 'ally' && actor.currentHealth > 0).length}`
+      : '';
+    this.enemyInfo?.setText(`当前目标：${wave?.title ?? '试炼凯旋'}${wave ? `  ·  敌势 ${wave.powerScore}` : ''}${runtimeSummary}`);
     if (message) {
       this.battleInfo?.setText(message);
     } else {
@@ -242,7 +245,13 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       }
 
       const isAlly = actor.team === 'ally';
-      const fillColor = isAlly ? 0x5d7f50 : 0x7b4a42;
+      const fillColor = isAlly
+        ? 0x5d7f50
+        : actor.kind === 'projectile'
+          ? 0x8e5f3f
+          : actor.kind === 'spell'
+            ? 0x5f6e90
+            : 0x7b4a42;
       const spriteKey = isAlly && actor.unitId ? `unit-${actor.unitId}` : undefined;
       const token = spriteKey
         ? this.add.image(actor.x, actor.y, spriteKey).setDisplaySize(48, 48)
@@ -256,7 +265,16 @@ export class JiuzhouBattleScene extends Phaser.Scene {
         fontSize: '11px',
         backgroundColor: isAlly ? '#4a5d33' : '#5e4127',
       });
-      this.battleLayer.add([token, hpBg, hpFg, name]);
+      const status = !isAlly && (actor.slowUntilMs ?? 0) > this.runtimeState.elapsedMs
+        ? this.add.text(actor.x - 10, actor.y - 48, '缓', {
+            color: '#eff8ff',
+            backgroundColor: '#486683',
+            fontFamily: 'Microsoft YaHei',
+            fontSize: '10px',
+            padding: { left: 4, right: 4, top: 2, bottom: 2 },
+          })
+        : undefined;
+      this.battleLayer.add(status ? [token, hpBg, hpFg, name, status] : [token, hpBg, hpFg, name]);
     }
   }
 

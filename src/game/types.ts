@@ -36,8 +36,12 @@ export interface TotemDefinition {
 export interface WaveEnemy {
   id: string;
   name: string;
+  kind?: 'melee' | 'projectile' | 'spell';
   attack: number;
   health: number;
+  range?: number;
+  speed?: number;
+  attackIntervalMs?: number;
 }
 
 export interface WaveDefinition {
