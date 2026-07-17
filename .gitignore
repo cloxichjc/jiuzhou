@@ -5,3 +5,8 @@ coverage/
 .superpowers/
 .playwright-mcp/
 current-mvp.png
+.venv-pw/
+tools/screenshot/out/
+.codex
+九州·缥缈录.txt
+九州缥缈录.epub

@@ -1,87 +1,53 @@
 import Phaser from 'phaser';
 import { chapter } from '../data/chapter';
+import { waves } from '../data/waves';
 import type { RunState } from '../types';
+import { drawPanel, inkText, makeChip, THEME, FONT_SIZE } from './theme';
 
 export interface HudRefs {
-  chapterText: Phaser.GameObjects.Text;
+  waveChip: Phaser.GameObjects.Container;
+  waveText: Phaser.GameObjects.Text;
   statHealth: Phaser.GameObjects.Text;
   statGold: Phaser.GameObjects.Text;
   statPopulation: Phaser.GameObjects.Text;
-  progressLine: Phaser.GameObjects.Text;
-  loreLine: Phaser.GameObjects.Text;
-  chipWave: Phaser.GameObjects.Text;
-  chipTotem: Phaser.GameObjects.Text;
+  totemText: Phaser.GameObjects.Text;
 }
 
+function statPill(scene: Phaser.Scene, x: number, y: number, width: number): { text: Phaser.GameObjects.Text } {
+  drawPanel(scene, { x, y, width, height: 30, fillAlpha: 0.9, radius: 15, borderWidth: 1.5 });
+  const text = inkText(scene, x, y, '', { size: FONT_SIZE.small, color: THEME.ink });
+  return { text };
+}
+
+/** 顶部 HUD：章节题字 + 波次 chip + 生命/金币/人口 pill + 名物计数。 */
 export function createHud(scene: Phaser.Scene, state: RunState): HudRefs {
-  const chapterText = scene.add.text(38, 34, chapter.title, {
-    color: '#2b1b0f',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '28px',
-    fontStyle: 'bold',
-  });
+  inkText(scene, 24, 26, chapter.title, { size: FONT_SIZE.body, bold: true }).setOrigin(0, 0.5);
 
-  const statHealth = scene.add.text(48, 78, '', {
-    color: '#58432c',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '16px',
-  });
+  const waveChip = makeChip(scene, 330, 26, '', THEME.cinnabar, FONT_SIZE.small);
+  const waveText = inkText(scene, 330, 26, '', { size: FONT_SIZE.small, color: THEME.cinnabar, bold: true });
 
-  const statGold = scene.add.text(150, 78, '', {
-    color: '#58432c',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '16px',
-  });
+  const health = statPill(scene, 70, 64, 108);
+  const gold = statPill(scene, 190, 64, 108);
+  const population = statPill(scene, 310, 64, 108);
 
-  const statPopulation = scene.add.text(252, 78, '', {
-    color: '#58432c',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '16px',
-  });
+  const totemText = inkText(scene, 24, 96, '', { size: FONT_SIZE.tiny, color: THEME.gold }).setOrigin(0, 0.5);
 
-  const progressLine = scene.add.text(38, 110, '', {
-    color: '#7a5933',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '13px',
-    wordWrap: { width: 220 },
-  });
-
-  const chipWave = scene.add.text(250, 108, '', {
-    color: '#f7ecd6',
-    backgroundColor: '#7b5431',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '11px',
-    padding: { left: 6, right: 6, top: 3, bottom: 3 },
-  });
-
-  const chipTotem = scene.add.text(250, 136, '', {
-    color: '#f7ecd6',
-    backgroundColor: '#556e4b',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '11px',
-    padding: { left: 6, right: 6, top: 3, bottom: 3 },
-  });
-
-  const loreLine = scene.add.text(248, 38, chapter.summary, {
-    color: '#6b4927',
-    fontFamily: 'Microsoft YaHei',
-    fontSize: '14px',
-    align: 'right',
-    wordWrap: { width: 94 },
-  });
-
-  updateHud({ chapterText, statHealth, statGold, statPopulation, progressLine, loreLine, chipWave, chipTotem }, state);
-  return { chapterText, statHealth, statGold, statPopulation, progressLine, loreLine, chipWave, chipTotem };
+  const refs: HudRefs = {
+    waveChip,
+    waveText,
+    statHealth: health.text,
+    statGold: gold.text,
+    statPopulation: population.text,
+    totemText,
+  };
+  updateHud(refs, state);
+  return refs;
 }
 
 export function updateHud(hud: HudRefs, state: RunState): void {
   hud.statHealth.setText(`生命 ${state.health}`);
   hud.statGold.setText(`金币 ${state.gold}`);
   hud.statPopulation.setText(`人口 ${state.usedPopulation}/${state.population}`);
-  hud.progressLine.setText(
-    `待命 ${state.bench.length}  ·  已部署 ${state.usedPopulation}  ·  准备进入下一轮交锋`
-  );
-  hud.loreLine.setText(state.ownedTotemIds.length > 0 ? '部族图腾已醒' : '部族图腾未醒');
-  hud.chipWave.setText(`第 ${state.waveNumber} 波`);
-  hud.chipTotem.setText(`图腾 ${state.ownedTotemIds.length}`);
+  hud.waveText.setText(state.waveNumber > waves.length ? '终' : `第 ${state.waveNumber} 波`);
+  hud.totemText.setText(state.ownedTotemIds.length > 0 ? `名物 ${state.ownedTotemIds.length} 已醒` : '');
 }

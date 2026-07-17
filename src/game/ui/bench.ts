@@ -36,7 +36,7 @@ function roleLabel(role: string): string {
     return '远击';
   }
   if (role === 'support') {
-    return '巫祝';
+    return '辅助';
   }
-  return '突袭';
+  return '轻骑';
 }

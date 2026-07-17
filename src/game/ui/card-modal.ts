@@ -15,14 +15,14 @@ export function buildUnitCardLines(unitId: string, star = 1): string[] {
 }
 
 function flavorText(unitId: string): string {
-  if (unitId === 'axe-warrior') {
-    return '北陆最先迎敌的一排战骨。';
+  if (unitId === 'jiye') {
+    return '枪锋所指，虎牙所向，宁为玉碎。';
   }
-  if (unitId === 'frost-shaman') {
-    return '以霜语祭骨，延缓敌势。';
+  if (unitId === 'asu') {
+    return '苍狼之裔，以祝祷护住同伴。';
   }
-  if (unitId === 'wolf-rider') {
-    return '以狼影撕开敌阵侧翼。';
+  if (unitId === 'xiyan') {
+    return '不世名将，雷厉风行。';
   }
-  return '熟悉殇州风雪与荒原追猎。';
+  return '羽族少女，风之所向，无拘无束。';
 }

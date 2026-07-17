@@ -1,4 +1,4 @@
-export type FactionId = 'northland-tribe';
+export type FactionId = 'northland-tribe' | 'piaomiao-heroes';
 export type UnitRole = 'frontline' | 'ranged' | 'support' | 'skirmisher';
 export type TotemStat = 'attack' | 'health' | 'tempo';
 export type RewardKind = 'unit' | 'totem' | 'economy';
@@ -42,6 +42,8 @@ export interface WaveEnemy {
   range?: number;
   speed?: number;
   attackIntervalMs?: number;
+  /** 指定敌人美术 key（enemy-melee/ranged/shield/elite/captain），缺省按 kind 映射 */
+  artKey?: string;
 }
 
 export interface WaveDefinition {
@@ -107,6 +109,8 @@ export interface BattleActor {
   attackCounter: number;
   didCharge: boolean;
   slowUntilMs?: number;
+  /** 敌人专用美术 key；友军一律按 unitId 取立绘 */
+  artKey?: string;
 }
 
 export interface BattleRuntimeState {

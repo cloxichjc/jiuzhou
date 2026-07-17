@@ -1,9 +1,9 @@
 import type { ChapterDefinition } from '../types';
 
 export const chapter: ChapterDefinition = {
-  id: 'shangzhou-north-wastes',
-  title: '殇州·北陆荒原',
-  faction: 'northland-tribe',
-  summary: '荒原试炼，短局推进。',
-  backdrop: '冻土、碎石、浅雪与旧战场并存的北陆边荒。',
+  id: 'nanhuai-old-times',
+  title: '南淮旧事·乱世初会',
+  faction: 'piaomiao-heroes',
+  summary: '一生之盟，自此而始。',
+  backdrop: '南淮城郊，青垣长街，乱世初逢。',
 };

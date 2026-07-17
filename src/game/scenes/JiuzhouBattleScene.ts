@@ -1,8 +1,15 @@
 import Phaser from 'phaser';
 import { createBattleRuntime, stepBattleRuntime, summarizeBattleRuntime } from '../core/battle';
-import { autoMergeRunState, applyRewardChoice, assignBoardSlot, getDeployedUnits, advanceAfterVictory, initialRunState } from '../core/run-state';
+import {
+  autoMergeRunState,
+  applyRewardChoice,
+  assignBoardSlot,
+  clearBoardSlot,
+  getDeployedUnits,
+  advanceAfterVictory,
+  initialRunState,
+} from '../core/run-state';
 import { createBenchUnit, getBenchUnitOrThrow, getUnitDefinitionOrThrow } from '../core/helpers';
-import { chapter } from '../data/chapter';
 import { waves } from '../data/waves';
 import { buildBenchCardModel } from '../ui/bench';
 import { buildUnitCardLines } from '../ui/card-modal';
@@ -10,25 +17,60 @@ import { createHud, updateHud, type HudRefs } from '../ui/hud';
 import { buildRewardPanelModel } from '../ui/reward-panel';
 import { preloadSharedAssets } from '../ui/assets';
 import { playDefeat, playDeploy, playHit, playUiClick, playVictory } from '../ui/sfx';
-import type { BattleEvent, BattleRuntimeState, BattleSimulationResult, BenchUnit, RewardChoice, RunState } from '../types';
+import {
+  drawInkDivider,
+  drawPanel,
+  inkText,
+  makeChip,
+  makeHpBar,
+  makeInkButton,
+  THEME,
+  FONT_SIZE,
+  type HpBarHandle,
+} from '../ui/theme';
+import type {
+  BattleActor,
+  BattleEvent,
+  BattleRuntimeState,
+  BattleSimulationResult,
+  BenchUnit,
+  RewardChoice,
+  RunState,
+} from '../types';
 
 interface SlotAnchor {
   x: number;
   y: number;
 }
 
+/** 我方上阵位（与 battle.ts 的 ALLY_START_POSITIONS 一致）。 */
 const BOARD_SLOT_POSITIONS: SlotAnchor[] = [
   { x: 118, y: 432 },
   { x: 196, y: 386 },
   { x: 274, y: 432 },
 ];
 
+/** 敌方预览位（与 battle.ts 的 ENEMY_START_POSITIONS 一致）。 */
+const ENEMY_PREVIEW_POSITIONS: SlotAnchor[] = [
+  { x: 96, y: 258 },
+  { x: 192, y: 238 },
+  { x: 288, y: 258 },
+];
+
 const RECRUIT_COST = 15;
 
+interface ActorToken {
+  container: Phaser.GameObjects.Container;
+  hp: HpBarHandle;
+  slowChip: Phaser.GameObjects.Container;
+  dissolving: boolean;
+}
+
+/** 战斗场景：布局重排 + 棋子化单位 + 水墨特效。 */
 export class JiuzhouBattleScene extends Phaser.Scene {
   private state: RunState = structuredClone(initialRunState);
   private hud?: HudRefs;
-  private battleLayer?: Phaser.GameObjects.Container;
+  private slotLayer?: Phaser.GameObjects.Container;
   private benchLayer?: Phaser.GameObjects.Container;
   private effectsLayer?: Phaser.GameObjects.Container;
   private overlayLayer?: Phaser.GameObjects.Container;
@@ -39,6 +81,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
   private recruitCursor = 0;
   private resolvingBattle = false;
   private runtimeState?: BattleRuntimeState;
+  private actorTokens = new Map<string, ActorToken>();
 
   constructor() {
     super('JiuzhouBattleScene');
@@ -54,20 +97,24 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.overlayLayer = undefined;
     this.recruitCursor = 0;
     this.resolvingBattle = false;
+    this.actorTokens = new Map();
   }
 
   create(): void {
     this.input.setTopOnly(false);
-    this.cameras.main.fadeIn(180, 18, 12, 8);
-    this.drawBackdrop();
-    this.battleLayer = this.add.container(0, 0);
+    this.cameras.main.fadeIn(200, 24, 22, 18);
+
+    this.add.image(195, 422, 'bg-battle').setDisplaySize(390, 844);
+    this.hud = createHud(this, this.state);
+
+    this.slotLayer = this.add.container(0, 0);
     this.benchLayer = this.add.container(0, 0);
     this.effectsLayer = this.add.container(0, 0);
-    this.hud = createHud(this, this.state);
+
     this.createInfoText();
     this.createButtons();
     this.refreshScene('拖拽战团卡牌到战场圆阵上阵。');
-    this.showWaveBanner(`第 ${this.state.waveNumber} 波 · ${waves[0]?.title ?? '试炼开始'}`);
+    this.showWaveBanner(`第 ${this.state.waveNumber} 波 · ${waves[0]?.title ?? '乱世初会'}`);
   }
 
   update(_time: number, delta: number): void {
@@ -80,209 +127,169 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     for (const event of step.events) {
       this.spawnBattleEventFx(event);
     }
-    this.refreshScene(`战团交锋中。历时 ${Math.round(this.runtimeState.elapsedMs / 100) / 10}s`);
+    this.syncActorTokens();
+    this.refreshWaveInfo();
 
     if (this.runtimeState.status !== 'ongoing') {
       this.finishRealtimeBattle();
     }
   }
 
-  private drawBackdrop(): void {
-    this.add.image(195, 422, 'ground').setDisplaySize(390, 844);
-    this.add.image(195, 104, 'panel-header').setDisplaySize(360, 154);
-    this.add.image(78, 78, 'hud-pill').setDisplaySize(90, 30);
-    this.add.image(180, 78, 'hud-pill').setDisplaySize(90, 30);
-    this.add.image(288, 78, 'hud-pill').setDisplaySize(96, 30);
-    this.add.image(195, 376, 'board-shangzhou').setDisplaySize(334, 446);
-    this.add.image(195, 745, 'panel-bench').setDisplaySize(360, 168);
-    this.add.rectangle(195, 621, 328, 62, 0xf4e6c9, 0.88).setStrokeStyle(2, 0x82603c, 0.7);
-    this.add.text(248, 138, '殇州试炼', {
-      color: '#765635',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '18px',
-      fontStyle: 'bold',
-    });
-  }
+  // ---------------------------------------------------------------- 静态区域
 
   private createInfoText(): void {
-    this.enemyInfo = this.add.text(36, 578, '', {
-      color: '#5c4127',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '15px',
-      fontStyle: 'bold',
-    });
-    this.battleInfo = this.add.text(36, 608, '', {
-      color: '#6c4d2c',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '12px',
-      wordWrap: { width: 318 },
-    });
+    drawPanel(this, { x: 195, y: 590, width: 356, height: 56, fillAlpha: 0.86, borderWidth: 1.5 });
+    this.enemyInfo = inkText(this, 24, 578, '', { size: FONT_SIZE.small, bold: true }).setOrigin(0, 0.5);
+    this.battleInfo = inkText(this, 24, 602, '', {
+      size: FONT_SIZE.tiny,
+      color: THEME.inkLight,
+      wordWrapWidth: 340,
+      align: 'left',
+    }).setOrigin(0, 0.5);
   }
 
   private createButtons(): void {
-    this.recruitButton = this.buildButton(304, 722, 92, 44, '招募', '#fff5ea', () => this.recruitUnit());
-    this.startButton = this.buildButton(304, 790, 108, 52, '开始', '#fff5ea', () => this.runBattle());
+    this.recruitButton = makeInkButton(this, {
+      x: 318,
+      y: 722,
+      width: 104,
+      height: 44,
+      label: `招募 ·${RECRUIT_COST}`,
+      fontSize: FONT_SIZE.small,
+      onTap: () => this.recruitUnit(),
+    });
+    this.startButton = makeInkButton(this, {
+      x: 318,
+      y: 790,
+      width: 104,
+      height: 52,
+      label: '开战',
+      fill: THEME.cinnabar,
+      onTap: () => this.runBattle(),
+    });
     this.recruitButton.setDepth(14);
     this.startButton.setDepth(14);
   }
 
-  private buildButton(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    label: string,
-    textColor: string,
-    onClick: () => void
-  ): Phaser.GameObjects.Container {
-    const container = this.add.container(x, y);
-    const skin = this.add.image(0, 0, 'button-lacquer').setDisplaySize(width, height);
-    const text = this.add.text(label.length > 2 ? -20 : -18, label.length > 2 ? -12 : -15, label, {
-      color: textColor,
-      fontFamily: 'Microsoft YaHei',
-      fontSize: label.length > 2 ? '20px' : '24px',
-      fontStyle: 'bold',
-    });
-    skin.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      playUiClick(this);
-      onClick();
-    });
-    container.add([skin, text]);
-    return container;
-  }
-
   private refreshScene(message?: string): void {
-    this.refreshHud();
-    this.refreshBattlefield();
+    if (this.hud) {
+      updateHud(this.hud, this.state);
+    }
+    this.refreshSlots();
     this.refreshBench();
     this.refreshWaveInfo(message);
     this.refreshButtonState();
   }
 
-  private refreshHud(): void {
-    if (this.hud) {
-      updateHud(this.hud, this.state);
-    }
-  }
-
   private refreshWaveInfo(message?: string): void {
     const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
     const runtimeSummary = this.runtimeState
-      ? `  ·  敌余 ${this.runtimeState.actors.filter((actor) => actor.team === 'enemy' && actor.currentHealth > 0).length}  我方 ${this.runtimeState.actors.filter((actor) => actor.team === 'ally' && actor.currentHealth > 0).length}`
+      ? `  ·  敌余 ${this.runtimeState.actors.filter((a) => a.team === 'enemy' && a.currentHealth > 0).length} 我余 ${this.runtimeState.actors.filter((a) => a.team === 'ally' && a.currentHealth > 0).length}`
       : '';
-    this.enemyInfo?.setText(`当前目标：${wave?.title ?? '试炼凯旋'}${wave ? `  ·  敌势 ${wave.powerScore}` : ''}${runtimeSummary}`);
-    if (message) {
+    this.enemyInfo?.setText(`当前目标：${wave?.title ?? '南淮已靖'}${wave ? ` · 敌势 ${wave.powerScore}` : ''}${runtimeSummary}`);
+    if (message !== undefined) {
       this.battleInfo?.setText(message);
-    } else {
-      this.battleInfo?.setText(chapter.backdrop);
     }
   }
 
-  private refreshBattlefield(): void {
-    this.battleLayer?.removeAll(true);
-    if (!this.battleLayer) {
+  // ---------------------------------------------------------------- 棋子
+
+  /** 水墨棋子：墨环框 + 立绘 + 名字。 */
+  private makeUnitToken(options: {
+    x: number;
+    y: number;
+    artKey: string;
+    frameKey: 'frame-ally' | 'frame-enemy';
+    name: string;
+    star?: number;
+    size?: number;
+  }): Phaser.GameObjects.Container {
+    const size = options.size ?? 64;
+    const container = this.add.container(options.x, options.y);
+
+    const frame = this.add.image(0, 0, options.frameKey).setDisplaySize(size, size).setAlpha(0.92);
+    const portrait = this.add.image(0, 0, options.artKey).setDisplaySize(size * 0.78, size * 0.78);
+    const name = inkText(this, 0, size / 2 + 8, options.name, {
+      size: FONT_SIZE.tiny,
+      bold: true,
+      color: options.frameKey === 'frame-ally' ? THEME.indigo : THEME.damage,
+    });
+    container.add([frame, portrait, name]);
+
+    if (options.star && options.star > 1) {
+      const star = inkText(this, size / 2 - 6, -size / 2 + 6, `${options.star}★`, {
+        size: FONT_SIZE.tiny,
+        color: THEME.gold,
+        bold: true,
+      });
+      container.add(star);
+    }
+
+    return container;
+  }
+
+  private refreshSlots(): void {
+    this.slotLayer?.removeAll(true);
+    if (!this.slotLayer || this.resolvingBattle) {
       return;
     }
 
-    if (this.resolvingBattle && this.runtimeState) {
-      this.renderRuntimeBattlefield();
-      return;
-    }
+    // 敌方预览
+    const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
+    wave?.enemies.slice(0, 3).forEach((enemy, index) => {
+      const pos = ENEMY_PREVIEW_POSITIONS[index];
+      const token = this.makeUnitToken({
+        x: pos.x,
+        y: pos.y,
+        artKey: enemy.artKey ?? 'enemy-melee',
+        frameKey: 'frame-enemy',
+        name: enemy.name,
+        size: 58,
+      });
+      this.slotLayer?.add(token);
+    });
 
+    drawInkDivider(this, 195, 330, 240);
+
+    // 我方上阵槽
     BOARD_SLOT_POSITIONS.forEach((slot, index) => {
-      const slotSkin = this.add.image(slot.x, slot.y, 'slot-stone').setDisplaySize(58, 58);
-      slotSkin.setAlpha(index < this.state.population ? 1 : 0.35);
-      this.battleLayer?.add(slotSkin);
-
+      const unlocked = index < this.state.population;
       const occupantId = this.state.boardSlots[index];
+
       if (!occupantId) {
-        const empty = this.add.text(slot.x - 18, slot.y - 10, index < this.state.population ? '上阵' : '封位', {
-          color: '#866440',
-          fontFamily: 'Microsoft YaHei',
-          fontSize: '13px',
+        const ring = this.add.graphics();
+        ring.lineStyle(2, unlocked ? THEME.inkLight : THEME.hpBack, unlocked ? 0.8 : 0.6);
+        ring.strokeCircle(slot.x, slot.y, 26);
+        const hint = inkText(this, slot.x, slot.y, unlocked ? '上阵' : '封', {
+          size: FONT_SIZE.tiny,
+          color: unlocked ? THEME.inkLight : THEME.hpBack,
         });
-        this.battleLayer?.add(empty);
+        this.slotLayer?.add([ring, hint]);
         return;
       }
 
       const occupant = getBenchUnitOrThrow(this.state.bench, occupantId);
       const unitDef = getUnitDefinitionOrThrow(occupant.unitId);
-      const pedestal = this.add.ellipse(slot.x, slot.y + 20, 44, 14, 0x4b6543, 0.22);
-      const icon = this.add.image(slot.x, slot.y + 2, `unit-${occupant.unitId}`).setDisplaySize(56, 56);
-      const name = this.add.text(slot.x - 24, slot.y + 34, `${unitDef.name.slice(0, 4)} ${occupant.star}星`, {
-        color: '#f8f1e3',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '11px',
-        backgroundColor: '#4f6a41',
+      const token = this.makeUnitToken({
+        x: slot.x,
+        y: slot.y,
+        artKey: `unit-${occupant.unitId}`,
+        frameKey: 'frame-ally',
+        name: unitDef.name,
+        star: occupant.star,
       });
-      this.battleLayer?.add([pedestal, icon, name]);
-      icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showCard(occupant));
-    });
-
-    const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
-    wave?.enemies.slice(0, 3).forEach((enemy, index) => {
-      const x = 96 + index * 96;
-      const y = 258;
-      const enemyBase = this.add.ellipse(x, y + 20, 46, 14, 0x6d4138, 0.24);
-      const enemyArt = this.add.image(x, y, this.getEnemyArtKey(enemy.kind ?? 'melee')).setDisplaySize(56, 56);
-      const enemyText = this.add.text(x - 18, y - 10, enemy.name.slice(0, 3), {
-        color: '#fef6e5',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '12px',
+      this.slotLayer?.add(token);
+      // 点已上阵单位下阵
+      token.setSize(64, 64);
+      token.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+        if (this.resolvingBattle || this.overlayLayer) return;
+        this.state = clearBoardSlot(this.state, index);
+        this.refreshScene(`${unitDef.name} 已下阵待命。`);
       });
-      const enemyTag = this.add.text(x - 16, y + 26, this.getEnemyKindLabel(enemy.kind ?? 'melee'), {
-        color: '#f8ead7',
-        backgroundColor: '#71483b',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '9px',
-        padding: { left: 4, right: 4, top: 2, bottom: 2 },
-      });
-      this.battleLayer?.add([enemyBase, enemyArt, enemyText, enemyTag]);
     });
   }
 
-  private renderRuntimeBattlefield(): void {
-    if (!this.battleLayer || !this.runtimeState) {
-      return;
-    }
-
-    for (const actor of this.runtimeState.actors) {
-      if (actor.currentHealth <= 0) {
-        continue;
-      }
-
-      const isAlly = actor.team === 'ally';
-      const fillColor = isAlly
-        ? 0x5d7f50
-        : actor.kind === 'projectile'
-          ? 0x8e5f3f
-          : actor.kind === 'spell'
-            ? 0x5f6e90
-            : 0x7b4a42;
-      const spriteKey = isAlly && actor.unitId ? `unit-${actor.unitId}` : this.getEnemyArtKey(actor.kind);
-      const base = this.add.ellipse(actor.x, actor.y + 20, 44, 14, fillColor, 0.2);
-      const token = this.add.image(actor.x, actor.y + 2, spriteKey).setDisplaySize(56, 56);
-      const hpRatio = actor.currentHealth / actor.maxHealth;
-      const hpBg = this.add.rectangle(actor.x, actor.y - 32, 40, 5, 0x2c2015, 0.8);
-      const hpFg = this.add.rectangle(actor.x - 20 + 40 * hpRatio / 2, actor.y - 32, 40 * hpRatio, 5, isAlly ? 0x9cc36f : 0xd77a68);
-      const name = this.add.text(actor.x - 24, actor.y + 26, actor.name.slice(0, 4), {
-        color: '#f8f1e3',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '11px',
-        backgroundColor: isAlly ? '#4a5d33' : '#5e4127',
-      });
-      const status = !isAlly && (actor.slowUntilMs ?? 0) > this.runtimeState.elapsedMs
-        ? this.add.text(actor.x - 10, actor.y - 48, '缓', {
-            color: '#eff8ff',
-            backgroundColor: '#486683',
-            fontFamily: 'Microsoft YaHei',
-            fontSize: '10px',
-            padding: { left: 4, right: 4, top: 2, bottom: 2 },
-          })
-        : undefined;
-      this.battleLayer.add(status ? [base, token, hpBg, hpFg, name, status] : [base, token, hpBg, hpFg, name]);
-    }
-  }
+  // ---------------------------------------------------------------- bench
 
   private refreshBench(): void {
     this.benchLayer?.removeAll(true);
@@ -291,24 +298,14 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     }
 
     this.benchLayer.add(
-      this.add.text(34, 682, '待上场战团', {
-        color: '#5a422d',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '20px',
-        fontStyle: 'bold',
-      })
+      inkText(this, 24, 662, '待上阵', { size: FONT_SIZE.body, bold: true }).setOrigin(0, 0.5)
     );
     this.benchLayer.add(
-      this.add.text(34, 704, '拖拽上阵，轻点看详情', {
-        color: '#8b6a45',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '12px',
-      })
+      inkText(this, 96, 663, '拖拽上阵 · 轻点看详情', { size: FONT_SIZE.tiny, color: THEME.inkLight }).setOrigin(0, 0.5)
     );
 
     this.state.bench.slice(0, 6).forEach((benchUnit, index) => {
-      const card = this.createBenchCard(benchUnit, index);
-      this.benchLayer?.add(card);
+      this.benchLayer?.add(this.createBenchCard(benchUnit, index));
     });
   }
 
@@ -316,100 +313,89 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     const model = buildBenchCardModel(benchUnit);
     const column = index % 3;
     const row = Math.floor(index / 3);
-    const originX = 58 + column * 78;
-    const originY = 736 + row * 68;
+    const x = 58 + column * 82;
+    const y = 736 + row * 78;
     const deployed = this.state.boardSlots.includes(benchUnit.instanceId);
 
-    const container = this.add.container(originX, originY);
-    const frame = this.add.image(0, 0, 'card-bench-compact').setDisplaySize(72, 94);
-    const icon = this.add.image(0, -18, model.artKey).setDisplaySize(34, 34);
-    const star = this.add.text(20, -36, `${model.star}★`, {
-      color: '#fff1d7',
-      backgroundColor: '#7b5431',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '9px',
-      padding: { left: 4, right: 4, top: 2, bottom: 2 },
+    const container = this.add.container(x, y);
+    const panel = drawPanel(this, {
+      x: 0,
+      y: 0,
+      width: 72,
+      height: 68,
+      fillAlpha: deployed ? 0.6 : 0.94,
+      border: deployed ? THEME.hpBack : THEME.ink,
+      borderWidth: 1.5,
+      radius: 8,
     });
-    const title = this.add.text(-22, 8, model.title.slice(0, 4), {
-      color: '#2e1e11',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '12px',
-      fontStyle: 'bold',
-    });
-    const sub = this.add.text(-22, 22, model.roleText, {
-      color: '#7a5a38',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '8px',
-    });
-    const chip = this.add.text(-22, 36, deployed ? '已上阵' : model.tagText, {
-      color: deployed ? '#f4eadb' : '#624325',
-      backgroundColor: deployed ? '#6f7f4b' : '#e6d1ad',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '8px',
-      padding: { left: 3, right: 3, top: 2, bottom: 2 },
-    });
-    container.add([frame, icon, star, title, sub, chip]);
-    container.setSize(72, 94);
+    const portrait = this.add.image(0, -12, model.artKey).setDisplaySize(36, 36);
+    const title = inkText(this, 0, 14, model.title, { size: FONT_SIZE.tiny, bold: true });
+    const star = inkText(this, -24, -24, `${model.star}★`, { size: FONT_SIZE.tiny, color: THEME.gold, bold: true });
+    container.add([panel, portrait, title, star]);
+
+    if (deployed) {
+      container.add(inkText(this, 24, -24, '阵', { size: FONT_SIZE.tiny, color: THEME.indigo, bold: true }));
+    }
+
+    container.setSize(72, 68);
     container.setInteractive({ draggable: true, useHandCursor: true });
     this.input.setDraggable(container);
 
-    let didDrag = false;
-
-    container.on('pointerdown', () => {
-      didDrag = false;
-    });
+    // 注意：可拖拽对象上点击只会触发 dragstart/dragend（没有 pointerup），
+    // 所以「轻点看详情」按 dragend 里位移 < 8px 判定。
     container.on('dragstart', () => {
-      if (this.resolvingBattle || this.overlayLayer) {
-        return;
-      }
-      didDrag = true;
-      container.setDepth(40);
-      container.setScale(1.06);
+      if (this.resolvingBattle || this.overlayLayer) return;
+      container.setDepth(40).setScale(1.06);
     });
     container.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
-      if (this.resolvingBattle || this.overlayLayer) {
-        return;
-      }
+      if (this.resolvingBattle || this.overlayLayer) return;
       container.x = dragX;
       container.y = dragY;
     });
     container.on('dragend', (pointer: Phaser.Input.Pointer) => {
+      container.setDepth(0).setScale(1);
       if (this.resolvingBattle || this.overlayLayer) {
         this.refreshScene();
         return;
       }
-      container.setDepth(0);
-      container.setScale(1);
-      const targetSlotIndex = this.findHoveredSlot(pointer.x, pointer.y);
-      if (targetSlotIndex >= 0) {
+
+      const moved = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.x, pointer.y);
+      if (moved < 8) {
+        this.showCard(benchUnit);
+        this.refreshScene();
+        return;
+      }
+
+      const drop = this.findHoveredSlot(pointer.x, pointer.y);
+      if (drop.locked) {
+        this.refreshScene('该阵位未开，先扩充人口。');
+        return;
+      }
+      if (drop.slotIndex >= 0) {
         playDeploy(this);
-        this.state = assignBoardSlot(this.state, benchUnit.instanceId, targetSlotIndex);
-        this.refreshScene(`已将 ${model.title} 布置到第 ${targetSlotIndex + 1} 格。`);
+        this.state = assignBoardSlot(this.state, benchUnit.instanceId, drop.slotIndex);
+        this.refreshScene(`已将 ${model.title} 布置到第 ${drop.slotIndex + 1} 格。`);
       } else {
         this.refreshScene();
       }
     });
-    container.on('pointerup', () => {
-      if (this.resolvingBattle || this.overlayLayer || didDrag) {
-        return;
-      }
-      this.showCard(benchUnit);
-    });
+
     return container;
   }
 
-  private findHoveredSlot(x: number, y: number): number {
+  /** 拖放落点：只接受已解锁槽位；压在锁定槽上单独回报。 */
+  private findHoveredSlot(x: number, y: number): { slotIndex: number; locked: boolean } {
     for (let index = 0; index < BOARD_SLOT_POSITIONS.length; index += 1) {
       const slot = BOARD_SLOT_POSITIONS[index];
-      if (Phaser.Math.Distance.Between(x, y, slot.x, slot.y) <= 34) {
-        return index;
+      if (Phaser.Math.Distance.Between(x, y, slot.x, slot.y) <= 40) {
+        return index < this.state.population ? { slotIndex: index, locked: false } : { slotIndex: -1, locked: true };
       }
     }
-    return -1;
+    return { slotIndex: -1, locked: false };
   }
 
   private recruitUnit(): void {
-    if (this.overlayLayer) {
+    if (this.overlayLayer || this.resolvingBattle) {
       return;
     }
     if (this.state.gold < RECRUIT_COST) {
@@ -429,6 +415,8 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.refreshScene(merged ? '三合一触发，战团已经升星。' : `招募了 ${getUnitDefinitionOrThrow(unitId).name}。`);
   }
 
+  // ---------------------------------------------------------------- 实时战斗
+
   private runBattle(): void {
     if (this.overlayLayer || this.resolvingBattle) {
       return;
@@ -436,7 +424,7 @@ export class JiuzhouBattleScene extends Phaser.Scene {
 
     const wave = waves.find((entry) => entry.id === `wave-${this.state.waveNumber}`);
     if (!wave) {
-      this.refreshWaveInfo('当前版本试炼已完成。');
+      this.refreshWaveInfo('南淮已靖，后会有期。');
       return;
     }
 
@@ -453,17 +441,204 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     });
 
     this.resolvingBattle = true;
-    this.state = {
-      ...this.state,
-      usedPopulation: deployed.length,
-    };
+    this.state = { ...this.state, usedPopulation: deployed.length };
+    this.slotLayer?.removeAll(true);
     this.effectsLayer?.removeAll(true);
-    this.refreshScene(`战团冲阵中。第 ${this.state.waveNumber} 波正在实时结算。`);
+    this.spawnActorTokens();
+    this.refreshWaveInfo('战团交锋中。');
+    this.refreshButtonState();
   }
 
-  private showRewards(resultMessage: string): void {
+  /** 战斗开始：为每个 actor 建持久棋子，之后每帧只改位置/血量。 */
+  private spawnActorTokens(): void {
+    this.actorTokens.clear();
+    if (!this.runtimeState) {
+      return;
+    }
+
+    for (const actor of this.runtimeState.actors) {
+      const isAlly = actor.team === 'ally';
+      const artKey = isAlly && actor.unitId ? `unit-${actor.unitId}` : (actor.artKey ?? 'enemy-melee');
+      const container = this.add.container(actor.x, actor.y);
+
+      const token = this.makeUnitToken({
+        x: 0,
+        y: 0,
+        artKey,
+        frameKey: isAlly ? 'frame-ally' : 'frame-enemy',
+        name: actor.name,
+        size: 56,
+      });
+      const hp = makeHpBar(this, 0, -40, 40, isAlly ? THEME.indigo : THEME.damage, 5);
+      const slowChip = makeChip(this, 24, -40, '缓', THEME.indigo, FONT_SIZE.tiny - 1);
+      slowChip.setVisible(false);
+
+      container.add([token, hp.container, slowChip]);
+      this.effectsLayer?.add(container);
+      this.actorTokens.set(actor.id, { container, hp, slowChip, dissolving: false });
+    }
+  }
+
+  private syncActorTokens(): void {
+    if (!this.runtimeState) {
+      return;
+    }
+
+    for (const actor of this.runtimeState.actors) {
+      const token = this.actorTokens.get(actor.id);
+      if (!token) {
+        continue;
+      }
+
+      token.container.setPosition(actor.x, actor.y);
+      token.hp.setRatio(Math.max(0, actor.currentHealth) / actor.maxHealth);
+      token.slowChip.setVisible((actor.slowUntilMs ?? 0) > this.runtimeState.elapsedMs && actor.currentHealth > 0);
+
+      if (actor.currentHealth <= 0 && !token.dissolving) {
+        token.dissolving = true;
+        this.tweens.add({
+          targets: token.container,
+          scale: 0.4,
+          alpha: 0,
+          duration: 420,
+          ease: 'Quad.easeIn',
+          onComplete: () => token.container.destroy(),
+        });
+      }
+    }
+  }
+
+  private spawnBattleEventFx(event: BattleEvent): void {
+    if (!this.effectsLayer || !this.runtimeState) {
+      return;
+    }
+
+    const attacker = this.runtimeState.actors.find((actor) => actor.id === event.actorId);
+    const allyDealt = attacker?.team === 'ally';
+    const numberColor = allyDealt ? THEME.cinnabar : THEME.inkDeep;
+
+    // 墨痕特效
+    if (event.kind === 'melee') {
+      this.flashFxImage('ink-slash', event.toX, event.toY, 72, 36);
+    } else if (event.kind === 'spell') {
+      this.flashFxImage('ink-bloom', event.toX, event.toY, 72, 72);
+    } else {
+      const dot = this.add.circle(event.fromX, event.fromY, 4, THEME.indigo, 0.9);
+      this.effectsLayer.add(dot);
+      this.tweens.add({
+        targets: dot,
+        x: event.toX,
+        y: event.toY,
+        duration: 180,
+        onComplete: () => {
+          this.flashFxImage('ink-bloom', event.toX, event.toY, 48, 48);
+          dot.destroy();
+        },
+      });
+    }
+
+    // 伤害数字（暴击放大变朱砂）
+    const isCrit = event.effect === 'crit';
+    const damage = inkText(this, event.toX, event.toY - 34, `${event.amount}`, {
+      size: isCrit ? 26 : 18,
+      bold: true,
+      color: isCrit ? THEME.cinnabar : numberColor,
+    });
+    this.effectsLayer.add(damage);
+    this.tweens.add({
+      targets: damage,
+      y: event.toY - 62,
+      alpha: 0,
+      duration: 560,
+      onComplete: () => damage.destroy(),
+    });
+
+    if (event.effect) {
+      const label = inkText(this, event.toX, event.toY + 30, this.effectLabel(event.effect), {
+        size: FONT_SIZE.tiny,
+        color: THEME.paper,
+      });
+      label.setBackgroundColor(Phaser.Display.Color.IntegerToColor(THEME.ink).rgba);
+      label.setPadding(4, 2, 4, 2);
+      this.effectsLayer.add(label);
+      this.tweens.add({
+        targets: label,
+        alpha: 0,
+        delay: 420,
+        duration: 260,
+        onComplete: () => label.destroy(),
+      });
+    }
+
+    if (isCrit || event.effect === 'charge') {
+      this.cameras.main.shake(80, 0.0022);
+    }
+    playHit(this, isCrit || event.effect === 'charge');
+  }
+
+  /** 墨痕图片闪现：淡入放大后淡出销毁。注意 tween 的 scale 会覆盖 setDisplaySize 换算出的缩放，必须按倍率相对缩放。 */
+  private flashFxImage(key: string, x: number, y: number, width: number, height: number): void {
+    const img = this.add.image(x, y, key).setDisplaySize(width, height).setAlpha(0);
+    const baseScaleX = img.scaleX;
+    const baseScaleY = img.scaleY;
+    this.effectsLayer?.add(img);
+    this.tweens.add({
+      targets: img,
+      alpha: 0.9,
+      scaleX: baseScaleX * 1.12,
+      scaleY: baseScaleY * 1.12,
+      duration: 130,
+      yoyo: true,
+      hold: 80,
+      onComplete: () => img.destroy(),
+    });
+  }
+
+  private effectLabel(effect: NonNullable<BattleEvent['effect']>): string {
+    if (effect === 'crit') return '虎牙破阵';
+    if (effect === 'slow') return '苍狼祝祷';
+    if (effect === 'charge') return '雷厉风行';
+    return '风羽回旋';
+  }
+
+  private finishRealtimeBattle(): void {
+    if (!this.runtimeState) {
+      return;
+    }
+
+    const summary = summarizeBattleRuntime(this.runtimeState);
+    this.resolvingBattle = false;
+    this.runtimeState = undefined;
+
+    for (const token of this.actorTokens.values()) {
+      token.container.destroy();
+    }
+    this.actorTokens.clear();
+
+    if (summary.outcome === 'victory') {
+      this.state = advanceAfterVictory(this.state);
+      playVictory(this);
+      this.refreshScene();
+      if (this.state.waveNumber > waves.length) {
+        this.showResultOverlay('胜', '南淮已靖', '你已经击破全部五波来敌，乱世的第一页就此翻过。');
+        return;
+      }
+      this.showWaveBanner(`第 ${this.state.waveNumber} 波 · ${waves.find((wave) => wave.id === `wave-${this.state.waveNumber}`)?.title ?? ''}`);
+      this.showRewards(`${summary.waveLabel} 已击破。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
+      return;
+    }
+
+    this.state = { ...this.state, health: summary.remainingHealth };
+    playDefeat(this);
+    this.refreshScene();
+    this.showResultOverlay('败', '战团折戟', `${summary.waveLabel} 失利。整军再来，乱世还长。`);
+  }
+
+  // ---------------------------------------------------------------- 面板（奖励/详情/结算）
+
+  private showRewards(message: string): void {
     this.clearOverlay();
-    this.refreshWaveInfo(resultMessage);
+    this.refreshWaveInfo(message);
 
     const model = buildRewardPanelModel({
       waveNumber: this.state.waveNumber - 1,
@@ -471,58 +646,42 @@ export class JiuzhouBattleScene extends Phaser.Scene {
       ownedTotemIds: this.state.ownedTotemIds,
     });
 
-    const overlay = this.add.container(24, 188);
-    overlay.setDepth(60);
-    const shade = this.add.rectangle(171, 188, 342, 380, 0x140f0b, 0.36);
-    const panel = this.add.image(186, 196, 'panel-reward').setDisplaySize(344, 392);
-    const title = this.add.text(112, 32, model.title, {
-      color: '#2d2115',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '26px',
-      fontStyle: 'bold',
-    });
-    const subtitle = this.add.text(22, 64, model.subtitle, {
-      color: '#6f5235',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
-      wordWrap: { width: 300 },
+    const overlay = this.add.container(0, 0).setDepth(60);
+    overlay.add(drawPanel(this, { x: 195, y: 400, width: 344, height: 400, borderWidth: 2 }));
+    overlay.add(inkText(this, 195, 238, model.title, { size: FONT_SIZE.heading, bold: true }));
+    overlay.add(
+      inkText(this, 195, 272, '三选一，壮大战团', { size: FONT_SIZE.small, color: THEME.inkLight })
+    );
+
+    model.choices.forEach((choice, index) => {
+      overlay.add(this.createRewardCard(choice, 195 + (index - 1) * 108, 400));
     });
 
-    overlay.add([shade, panel, title, subtitle]);
-    model.choices.forEach((choice, index) => {
-      overlay.add(this.createRewardCard(choice, 18 + index * 106, 120));
-    });
     this.overlayLayer = overlay;
   }
 
-  private createRewardCard(choice: RewardChoice & { artKey?: string; chipText?: string; theme?: string }, x: number, y: number): Phaser.GameObjects.Container {
+  private createRewardCard(
+    choice: RewardChoice & { artKey?: string; chipText?: string; theme?: string },
+    x: number,
+    y: number
+  ): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
-    const frame = this.add.image(48, 94, 'card-reward').setDisplaySize(98, 188);
-    const glow = this.add.rectangle(48, 94, 98, 188, choice.theme === 'totem' ? 0x6d8f7d : choice.theme === 'economy' ? 0x8f6a46 : 0x7f5c39, 0.08);
-    const icon = this.add.image(48, 42, choice.artKey ?? 'button-lacquer').setDisplaySize(46, 46);
-    const title = this.add.text(12, 78, choice.label, {
-      color: '#2d2115',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
-      fontStyle: 'bold',
-      wordWrap: { width: 72 },
-      align: 'center',
-    });
-    const chip = this.add.text(14, 118, choice.chipText ?? choice.kind, {
-      color: '#f7ebd2',
-      backgroundColor: choice.theme === 'totem' ? '#476b58' : choice.theme === 'economy' ? '#8a6137' : '#7d4d2e',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '10px',
-      padding: { left: 4, right: 4, top: 2, bottom: 2 },
-    });
-    const desc = this.add.text(12, 146, choice.description, {
-      color: '#6b4c2c',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '11px',
-      wordWrap: { width: 72 },
-    });
-    frame.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.pickReward(choice));
-    container.add([glow, frame, icon, title, chip, desc]);
+    container.add(drawPanel(this, { x: 0, y: 0, width: 100, height: 210, borderWidth: 1.5, radius: 8 }));
+
+    const chipColor = choice.theme === 'totem' ? THEME.indigo : choice.theme === 'economy' ? THEME.gold : THEME.cinnabar;
+    container.add(this.add.image(0, -68, choice.artKey ?? 'ink-bloom').setDisplaySize(52, 52));
+    container.add(inkText(this, 0, -26, choice.label, { size: FONT_SIZE.small, bold: true, wordWrapWidth: 88 }));
+    container.add(makeChip(this, 0, 4, choice.chipText ?? '', chipColor, FONT_SIZE.tiny - 1));
+    container.add(
+      inkText(this, 0, 56, choice.description, {
+        size: FONT_SIZE.tiny,
+        color: THEME.inkLight,
+        wordWrapWidth: 84,
+      })
+    );
+
+    container.setSize(100, 210);
+    container.setInteractive({ useHandCursor: true }).on('pointerup', () => this.pickReward(choice));
     return container;
   }
 
@@ -532,315 +691,113 @@ export class JiuzhouBattleScene extends Phaser.Scene {
     this.state = applyRewardChoice(this.state, choice);
     this.clearOverlay();
     const merged = this.state.bench.length < before + (choice.kind === 'unit' ? 1 : 0);
-    this.refreshScene(merged ? `获得 ${choice.label}，并触发了三合一升星。` : `获得 ${choice.label}。继续推进下一波。`);
-    this.showWaveBanner(`第 ${this.state.waveNumber} 波 · ${waves.find((wave) => wave.id === `wave-${this.state.waveNumber}`)?.title ?? '继续试炼'}`);
+    this.refreshScene(merged ? `获得 ${choice.label}，并触发三合一升星。` : `获得 ${choice.label}。`);
   }
 
   private showCard(unit: BenchUnit): void {
     this.clearOverlay();
-    const overlay = this.add.container(38, 172);
-    overlay.setDepth(70);
-    const shade = this.add.rectangle(157, 178, 314, 356, 0x18120d, 0.32);
-    const panel = this.add.image(158, 182, 'panel-detail').setDisplaySize(304, 348);
-    const icon = this.add.image(74, 74, `unit-${unit.unitId}`).setDisplaySize(84, 84);
+
     const lines = buildUnitCardLines(unit.unitId, unit.star);
-    const title = this.add.text(136, 40, lines[0], {
-      color: '#2d2115',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '22px',
-      fontStyle: 'bold',
+    const overlay = this.add.container(0, 0).setDepth(70);
+    overlay.add(drawPanel(this, { x: 195, y: 400, width: 320, height: 390, borderWidth: 2 }));
+    overlay.add(this.add.image(120, 278, `unit-${unit.unitId}`).setDisplaySize(84, 84));
+    overlay.add(inkText(this, 240, 246, lines[0], { size: FONT_SIZE.heading - 4, bold: true }));
+    overlay.add(inkText(this, 240, 284, lines[1], { size: FONT_SIZE.small, color: THEME.inkLight }));
+    overlay.add(makeChip(this, 84, 356, '技能', THEME.cinnabar));
+    overlay.add(inkText(this, 195, 392, lines[2], { size: FONT_SIZE.small, wordWrapWidth: 260 }));
+    overlay.add(makeChip(this, 84, 446, '其人', THEME.indigo));
+    overlay.add(inkText(this, 195, 480, lines[3], { size: FONT_SIZE.small, wordWrapWidth: 260, color: THEME.inkLight }));
+    overlay.add(inkText(this, 195, 532, lines[4], { size: FONT_SIZE.tiny, wordWrapWidth: 260, color: THEME.inkLight }));
+
+    const close = makeInkButton(this, {
+      x: 195,
+      y: 574,
+      width: 120,
+      height: 36,
+      label: '关闭',
+      fontSize: FONT_SIZE.small,
+      onTap: () => this.clearOverlay(),
     });
-    const stats = this.add.text(136, 84, lines[1], {
-      color: '#5a4128',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
-      wordWrap: { width: 152 },
-    });
-    const skillTag = this.add.text(34, 156, '技能', {
-      color: '#f7ecd6',
-      backgroundColor: '#7b5431',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '11px',
-      padding: { left: 6, right: 6, top: 3, bottom: 3 },
-    });
-    const skill = this.add.text(34, 182, lines[2], {
-      color: '#714d2d',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '15px',
-      wordWrap: { width: 244 },
-    });
-    const roleTag = this.add.text(34, 244, '定位', {
-      color: '#f7ecd6',
-      backgroundColor: '#556e4b',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '11px',
-      padding: { left: 6, right: 6, top: 3, bottom: 3 },
-    });
-    const roleText = this.add.text(34, 270, lines[4], {
-      color: '#5a4128',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
-      wordWrap: { width: 244 },
-    });
-    const lore = this.add.text(34, 316, lines[3], {
-      color: '#8a6742',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
-      wordWrap: { width: 244 },
-    });
-    const close = this.add.text(238, 24, '关闭', {
-      color: '#915b32',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '18px',
-    });
-    close.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.clearOverlay());
-    overlay.add([shade, panel, icon, title, stats, skillTag, skill, roleTag, roleText, lore, close]);
+    overlay.add(close);
+
     this.overlayLayer = overlay;
   }
 
+  private showResultOverlay(seal: string, titleText: string, bodyText: string): void {
+    this.clearOverlay();
+
+    const won = seal === '胜';
+    const overlay = this.add.container(0, 0).setDepth(90);
+    overlay.add(drawPanel(this, { x: 195, y: 400, width: 344, height: 380, borderWidth: 2 }));
+    overlay.add(this.add.image(195, 316, 'ink-bloom').setDisplaySize(180, 180).setAlpha(0.9));
+    overlay.add(
+      inkText(this, 195, 316, seal, {
+        size: 72,
+        bold: true,
+        color: won ? THEME.cinnabar : THEME.inkLight,
+      })
+    );
+    overlay.add(inkText(this, 195, 432, titleText, { size: FONT_SIZE.heading, bold: true }));
+    overlay.add(inkText(this, 195, 472, bodyText, { size: FONT_SIZE.small, color: THEME.inkLight, wordWrapWidth: 280 }));
+
+    overlay.add(
+      makeInkButton(this, {
+        x: 130,
+        y: 552,
+        width: 128,
+        height: 44,
+        label: won ? '再开一局' : '重新试炼',
+        fontSize: FONT_SIZE.small,
+        onTap: () => {
+          playUiClick(this);
+          this.scene.start('JiuzhouBattleScene', { freshRun: true });
+        },
+      })
+    );
+    overlay.add(
+      makeInkButton(this, {
+        x: 272,
+        y: 552,
+        width: 128,
+        height: 44,
+        label: '返回首页',
+        fontSize: FONT_SIZE.small,
+        fill: THEME.indigo,
+        onTap: () => {
+          playUiClick(this);
+          this.scene.start('TitleScene');
+        },
+      })
+    );
+
+    this.overlayLayer = overlay;
+  }
+
+  // ---------------------------------------------------------------- 杂项
+
   private refreshButtonState(): void {
     const deployedCount = getDeployedUnits(this.state).length;
-    this.startButton?.setAlpha(deployedCount > 0 && !this.overlayLayer && !this.resolvingBattle ? 1 : 0.65);
-    this.recruitButton?.setAlpha(this.state.gold >= RECRUIT_COST && !this.overlayLayer && !this.resolvingBattle ? 1 : 0.7);
+    this.startButton?.setAlpha(deployedCount > 0 && !this.overlayLayer && !this.resolvingBattle ? 1 : 0.5);
+    this.recruitButton?.setAlpha(this.state.gold >= RECRUIT_COST && !this.overlayLayer && !this.resolvingBattle ? 1 : 0.6);
   }
 
   private clearOverlay(): void {
     this.overlayLayer?.destroy(true);
     this.overlayLayer = undefined;
-  }
-
-  private spawnBattleEventFx(event: BattleEvent): void {
-    if (!this.effectsLayer) {
-      return;
-    }
-
-    const tint = event.effect === 'crit'
-      ? 0xff9b5c
-      : event.effect === 'slow'
-        ? 0x8fd4ff
-        : event.effect === 'charge'
-          ? 0xd7c15d
-          : event.effect === 'longshot'
-            ? 0xf2d889
-            : event.kind === 'spell'
-              ? 0x9dd3ff
-              : event.kind === 'projectile'
-                ? 0xe9c074
-                : 0xdc7b58;
-    const projectile = this.add.circle(event.fromX, event.fromY, event.kind === 'melee' ? 7 : 5, tint, 0.95);
-    const trail = this.add.rectangle(
-      (event.fromX + event.toX) / 2,
-      (event.fromY + event.toY) / 2,
-      Math.max(18, Phaser.Math.Distance.Between(event.fromX, event.fromY, event.toX, event.toY) - 18),
-      event.kind === 'spell' ? 6 : 4,
-      tint,
-      0.18
-    );
-    trail.rotation = Phaser.Math.Angle.Between(event.fromX, event.fromY, event.toX, event.toY);
-    this.effectsLayer.add([trail, projectile]);
-
-    this.tweens.add({
-      targets: projectile,
-      x: event.toX,
-      y: event.toY,
-      duration: event.kind === 'melee' ? 160 : 220,
-      ease: 'Quad.easeOut',
-      onComplete: () => {
-        const burst = this.add.circle(event.toX, event.toY, 10, tint, 0.4);
-        const damage = this.add.text(event.toX - 12, event.toY - 14, `${event.amount}`, {
-          color: '#fff4d7',
-          stroke: '#66391f',
-          strokeThickness: 3,
-          fontFamily: 'Microsoft YaHei',
-          fontSize: '18px',
-          fontStyle: 'bold',
-        });
-        const marker = event.effect
-          ? this.add.text(event.toX - 18, event.toY + 4, this.effectLabel(event.effect), {
-              color: '#fdf1d9',
-              backgroundColor: '#6b4125',
-              fontFamily: 'Microsoft YaHei',
-              fontSize: '10px',
-              padding: { left: 4, right: 4, top: 2, bottom: 2 },
-            })
-          : undefined;
-        this.effectsLayer?.add(marker ? [burst, damage, marker] : [burst, damage]);
-        playHit(this, event.effect === 'crit' || event.effect === 'charge');
-        this.cameras.main.shake(90, 0.0025);
-        this.tweens.add({
-          targets: marker ? [burst, damage, marker] : [burst, damage],
-          y: '-=22',
-          alpha: 0,
-          duration: 420,
-          onComplete: () => {
-            burst.destroy();
-            damage.destroy();
-            marker?.destroy();
-          },
-        });
-        projectile.destroy();
-        trail.destroy();
-      },
-    });
-  }
-
-  private effectLabel(effect: NonNullable<BattleEvent['effect']>): string {
-    if (effect === 'crit') {
-      return '裂骨';
-    }
-    if (effect === 'slow') {
-      return '霜咒';
-    }
-    if (effect === 'charge') {
-      return '扑袭';
-    }
-    return '远矛';
-  }
-
-  private showResultBanner(outcome: BattleSimulationResult['outcome'], deployedCount: number): void {
-    if (!this.effectsLayer) {
-      return;
-    }
-    const banner = this.add.rectangle(195, 212, 220, 44, outcome === 'victory' ? 0x7f4a2a : 0x553737, 0.95);
-    banner.setStrokeStyle(2, 0xf0dbb7);
-    const text = this.add.text(128, 196, outcome === 'victory' ? `破阵 · ${deployedCount}骑突入` : '折戟 · 战团受挫', {
-      color: '#fff0d9',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '20px',
-      fontStyle: 'bold',
-    });
-    this.effectsLayer.add([banner, text]);
-    this.tweens.add({
-      targets: [banner, text],
-      alpha: 0,
-      delay: 360,
-      duration: 620,
-      onComplete: () => {
-        banner.destroy();
-        text.destroy();
-      },
-    });
-  }
-
-  private finishRealtimeBattle(): void {
-    if (!this.runtimeState) {
-      return;
-    }
-
-    const summary = summarizeBattleRuntime(this.runtimeState);
-    const deployedCount = this.runtimeState.actors.filter((actor) => actor.team === 'ally' && actor.currentHealth > 0).length;
-    this.showResultBanner(summary.outcome, Math.max(1, deployedCount));
-    this.resolvingBattle = false;
-    this.runtimeState = undefined;
-
-    if (summary.outcome === 'victory') {
-      this.state = advanceAfterVictory(this.state);
-      playVictory(this);
-      if (this.state.waveNumber > waves.length) {
-        this.showResultOverlay('试炼凯旋', '你已经完成殇州·北陆荒原的全部波次。');
-        return;
-      }
-      this.showRewards(`${summary.waveLabel} 已击破。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
-      return;
-    }
-
-    this.state = {
-      ...this.state,
-      health: summary.remainingHealth,
-    };
-    playDefeat(this);
-    this.showResultOverlay('试炼折戟', `${summary.waveLabel} 失利。敌势 ${summary.enemyPower.toFixed(0)}，我方战势 ${summary.alliedPower.toFixed(0)}。`);
-  }
-
-  private getEnemyArtKey(kind: 'melee' | 'spell' | 'projectile'): string {
-    if (kind === 'projectile') {
-      return 'enemy-projectile';
-    }
-    if (kind === 'spell') {
-      return 'enemy-spell';
-    }
-    return 'enemy-melee';
-  }
-
-  private getEnemyKindLabel(kind: 'melee' | 'spell' | 'projectile'): string {
-    if (kind === 'projectile') {
-      return '远袭';
-    }
-    if (kind === 'spell') {
-      return '术法';
-    }
-    return '近战';
+    this.refreshButtonState();
   }
 
   private showWaveBanner(text: string): void {
-    const banner = this.add.container(64, 186);
-    banner.setDepth(80);
-    const panel = this.add.image(132, 22, 'hud-pill').setDisplaySize(244, 38);
-    const label = this.add.text(44, 9, text, {
-      color: '#5c4127',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
-      fontStyle: 'bold',
-    });
-    banner.add([panel, label]);
+    const banner = this.add.container(195, 330).setDepth(80);
+    banner.add(drawPanel(this, { x: 0, y: 0, width: 280, height: 48, border: THEME.cinnabar, borderWidth: 2, radius: 24 }));
+    banner.add(inkText(this, 0, 0, text, { size: FONT_SIZE.body, bold: true, color: THEME.cinnabar }));
+
     this.tweens.add({
       targets: banner,
-      y: 168,
       alpha: 0,
-      delay: 620,
-      duration: 340,
+      delay: 1100,
+      duration: 420,
       onComplete: () => banner.destroy(true),
     });
-  }
-
-  private showResultOverlay(titleText: string, bodyText: string): void {
-    this.clearOverlay();
-    const overlay = this.add.container(24, 188);
-    overlay.setDepth(90);
-    const shade = this.add.rectangle(171, 188, 342, 380, 0x140f0b, 0.42);
-    const panel = this.add.image(186, 196, 'panel-reward').setDisplaySize(344, 392);
-    const title = this.add.text(104, 42, titleText, {
-      color: '#2d2115',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '28px',
-      fontStyle: 'bold',
-    });
-    const body = this.add.text(34, 98, bodyText, {
-      color: '#6b4f31',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '15px',
-      wordWrap: { width: 300 },
-    });
-    const retry = this.buildOverlayButton(90, 286, 120, 46, titleText === '试炼凯旋' ? '再开一局' : '重新试炼', () => {
-      playUiClick(this);
-      this.scene.start('JiuzhouBattleScene', { freshRun: true });
-    });
-    const home = this.buildOverlayButton(242, 286, 120, 46, '返回首页', () => {
-      playUiClick(this);
-      this.scene.start('TitleScene');
-    });
-    overlay.add([shade, panel, title, body, retry, home]);
-    this.overlayLayer = overlay;
-  }
-
-  private buildOverlayButton(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    label: string,
-    onClick: () => void
-  ): Phaser.GameObjects.Container {
-    const container = this.add.container(x, y);
-    const skin = this.add.image(0, 0, 'button-lacquer').setDisplaySize(width, height);
-    const text = this.add.text(label.length > 3 ? -34 : -28, -14, label, {
-      color: '#fff5ea',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: label.length > 3 ? '18px' : '20px',
-      fontStyle: 'bold',
-    });
-    skin.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
-    container.add([skin, text]);
-    return container;
   }
 }

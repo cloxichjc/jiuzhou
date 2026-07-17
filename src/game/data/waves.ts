@@ -1,50 +1,51 @@
 import type { WaveDefinition } from '../types';
 
+/** 南淮旧事五波：山贼 → 流寇 → 赤牙死士 → 赤牙百夫长。数值沿用原表。 */
 export const waves: WaveDefinition[] = [
   {
     id: 'wave-1',
-    title: '荒魂试探',
+    title: '山贼试探',
     powerScore: 24,
     enemies: [
-      { id: 'wight-scout', name: '荒魂斥候', kind: 'melee', attack: 10, health: 56, speed: 42 },
+      { id: 'bandit-scout', name: '山贼斥候', kind: 'melee', attack: 10, health: 56, speed: 42, artKey: 'enemy-melee' },
     ],
   },
   {
     id: 'wave-2',
-    title: '敌对斥候',
+    title: '山贼来袭',
     powerScore: 38,
     enemies: [
-      { id: 'raider', name: '敌对部族兵', kind: 'melee', attack: 13, health: 74, speed: 48 },
-      { id: 'raider-archer', name: '荒地弓手', kind: 'projectile', attack: 12, health: 52, range: 170, attackIntervalMs: 1260, speed: 28 },
+      { id: 'bandit-melee', name: '山贼刀手', kind: 'melee', attack: 13, health: 74, speed: 48, artKey: 'enemy-melee' },
+      { id: 'bandit-archer', name: '山贼弓手', kind: 'projectile', attack: 12, health: 52, range: 170, attackIntervalMs: 1260, speed: 28, artKey: 'enemy-ranged' },
     ],
   },
   {
     id: 'wave-3',
-    title: '河络残兵',
+    title: '流寇残部',
     powerScore: 54,
     enemies: [
-      { id: 'heluo-guard', name: '河络残兵', kind: 'melee', attack: 15, health: 92, speed: 40 },
-      { id: 'heluo-bolt', name: '弩台残械', kind: 'projectile', attack: 16, health: 48, range: 190, attackIntervalMs: 1320, speed: 24 },
+      { id: 'rogue-shield', name: '流寇盾卫', kind: 'melee', attack: 15, health: 92, speed: 40, artKey: 'enemy-shield' },
+      { id: 'rogue-bolt', name: '流寇弩手', kind: 'projectile', attack: 16, health: 48, range: 190, attackIntervalMs: 1320, speed: 24, artKey: 'enemy-ranged' },
     ],
   },
   {
     id: 'wave-4',
-    title: '寒潮突袭',
+    title: '赤牙死士',
     powerScore: 72,
     enemies: [
-      { id: 'ice-wight', name: '寒魂', kind: 'spell', attack: 18, health: 88, range: 120, attackIntervalMs: 1380, speed: 34 },
-      { id: 'ice-wight-2', name: '寒魂', kind: 'spell', attack: 18, health: 88, range: 120, attackIntervalMs: 1380, speed: 34 },
-      { id: 'raider-chief', name: '部族勇士', kind: 'melee', attack: 20, health: 120, speed: 50 },
+      { id: 'chiya-1', name: '赤牙死士', kind: 'spell', attack: 18, health: 88, range: 120, attackIntervalMs: 1380, speed: 34, artKey: 'enemy-elite' },
+      { id: 'chiya-2', name: '赤牙死士', kind: 'spell', attack: 18, health: 88, range: 120, attackIntervalMs: 1380, speed: 34, artKey: 'enemy-elite' },
+      { id: 'chiya-lead', name: '赤牙头目', kind: 'melee', attack: 20, health: 120, speed: 50, artKey: 'enemy-elite' },
     ],
   },
   {
     id: 'wave-5',
-    title: '北陆决斗',
+    title: '赤牙百夫长',
     powerScore: 95,
     enemies: [
-      { id: 'warlord', name: '北陆战首', kind: 'melee', attack: 26, health: 160, speed: 52, attackIntervalMs: 980 },
-      { id: 'guard', name: '护卫', kind: 'melee', attack: 16, health: 94, speed: 42 },
-      { id: 'guard-2', name: '护卫', kind: 'melee', attack: 16, health: 94, speed: 42 },
+      { id: 'centurion', name: '赤牙百夫长', kind: 'melee', attack: 26, health: 160, speed: 52, attackIntervalMs: 980, artKey: 'enemy-captain' },
+      { id: 'guard-1', name: '赤牙护卫', kind: 'melee', attack: 16, health: 94, speed: 42, artKey: 'enemy-melee' },
+      { id: 'guard-2', name: '赤牙护卫', kind: 'melee', attack: 16, health: 94, speed: 42, artKey: 'enemy-melee' },
     ],
   },
 ];

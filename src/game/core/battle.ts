@@ -216,6 +216,7 @@ function createEnemyActor(enemy: WaveEnemy, index: number): BattleActor {
     cooldownRemainingMs: 280,
     attackCounter: 0,
     didCharge: false,
+    artKey: enemy.artKey,
   };
 }
 
@@ -228,23 +229,23 @@ function computeDamageProfile(
   let amount = actor.attack;
   let effect: 'crit' | 'slow' | 'charge' | 'longshot' | undefined;
 
-  if (actor.unitId === 'axe-warrior' && actor.attackCounter % 3 === 0) {
+  if (actor.unitId === 'jiye' && actor.attackCounter % 3 === 0) {
     amount *= 1.8;
     effect = 'crit';
   }
 
-  if (actor.unitId === 'wolf-rider' && !actor.didCharge) {
+  if (actor.unitId === 'xiyan' && !actor.didCharge) {
     amount *= 1.65;
     actor.didCharge = true;
     effect = 'charge';
   }
 
-  if (actor.unitId === 'wastes-hunter' && distance > 130) {
+  if (actor.unitId === 'yuran' && distance > 130) {
     amount *= 1.35;
     effect = 'longshot';
   }
 
-  if (actor.unitId === 'frost-shaman') {
+  if (actor.unitId === 'asu') {
     amount *= 0.9;
     effect = 'slow';
     target.slowUntilMs = elapsedMs + 1600;

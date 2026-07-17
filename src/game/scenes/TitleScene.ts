@@ -1,12 +1,10 @@
 import Phaser from 'phaser';
 import { chapter } from '../data/chapter';
-import { units } from '../data/units';
 import { preloadSharedAssets } from '../ui/assets';
-import { playUiClick } from '../ui/sfx';
+import { drawInkDivider, inkText, makeInkButton, THEME, FONT_SIZE } from '../ui/theme';
 
+/** 标题场景：宣纸远山底 + 题字 + 三主角群像 + 墨色开始按钮。 */
 export class TitleScene extends Phaser.Scene {
-  private overlay?: Phaser.GameObjects.Container;
-
   constructor() {
     super('TitleScene');
   }
@@ -16,132 +14,42 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.drawBackdrop();
-    this.drawHeroArea();
-    this.drawButtons();
-    this.cameras.main.fadeIn(220, 18, 12, 8);
-  }
+    this.add.image(195, 422, 'bg-title').setDisplaySize(390, 844);
 
-  private drawBackdrop(): void {
-    this.add.image(195, 422, 'ground').setDisplaySize(390, 844);
-    this.add.rectangle(195, 422, 390, 844, 0x1a120d, 0.16);
-    this.add.image(195, 430, 'board-shangzhou').setDisplaySize(346, 520).setAlpha(0.96);
-  }
+    inkText(this, 195, 196, '九州·缥缈录', { size: FONT_SIZE.title, bold: true, color: THEME.inkDeep });
+    drawInkDivider(this, 195, 244, 220);
+    inkText(this, 195, 276, '一生之盟，自此而始', { size: FONT_SIZE.body, color: THEME.inkLight });
 
-  private drawHeroArea(): void {
-    this.add.image(195, 188, 'title-emblem').setDisplaySize(150, 150);
-    this.add.text(72, 294, '九州 · 殇州试炼', {
-      color: '#2d1d12',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '28px',
-      fontStyle: 'bold',
-    });
-    this.add.text(82, 332, '北陆荒原，部族战棋再启', {
-      color: '#6f5234',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
-    });
-    this.add.text(92, 394, `当前章节：${chapter.title}`, {
-      color: '#5e452b',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '16px',
-      backgroundColor: '#f1e4c8',
-      padding: { left: 10, right: 10, top: 6, bottom: 6 },
-    });
-    this.add.text(72, 446, chapter.backdrop, {
-      color: '#6c4f2d',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '14px',
-      wordWrap: { width: 242 },
-    });
-    this.add.image(116, 538, 'unit-axe-warrior').setDisplaySize(74, 74);
-    this.add.image(194, 532, 'unit-frost-shaman').setDisplaySize(70, 70);
-    this.add.image(272, 538, 'unit-wolf-rider').setDisplaySize(74, 74);
-  }
+    inkText(this, 195, 330, chapter.title, { size: FONT_SIZE.small, color: THEME.indigo });
+    inkText(this, 195, 356, chapter.backdrop, { size: FONT_SIZE.tiny, color: THEME.inkLight });
 
-  private drawButtons(): void {
-    this.buildButton(195, 656, 186, 62, '开始试炼', () => this.startTrial());
-    this.buildButton(195, 732, 160, 48, '战团图鉴', () => this.showRoster(), 0.92);
-    this.add.text(108, 786, '微信小游戏直入结构：打开即玩，停顿最少。', {
-      color: '#7d5d39',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '12px',
-    });
-  }
-
-  private buildButton(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    label: string,
-    onClick: () => void,
-    alpha = 1
-  ): void {
-    const skin = this.add.image(x, y, 'button-lacquer').setDisplaySize(width, height).setAlpha(alpha);
-    const text = this.add.text(x - (label.length > 3 ? 44 : 34), y - 16, label, {
-      color: '#fff4e7',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: label.length > 3 ? '24px' : '28px',
-      fontStyle: 'bold',
-    });
-    skin.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      playUiClick(this);
-      onClick();
-    });
-    text.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      playUiClick(this);
-      onClick();
-    });
-  }
-
-  private startTrial(): void {
-    this.scene.start('JiuzhouBattleScene', { freshRun: true });
-  }
-
-  private showRoster(): void {
-    this.overlay?.destroy(true);
-    const overlay = this.add.container(18, 110);
-    const shade = this.add.rectangle(177, 214, 354, 428, 0x120d08, 0.34);
-    const panel = this.add.image(177, 214, 'panel-detail').setDisplaySize(340, 404);
-    const title = this.add.text(118, 26, '战团图鉴', {
-      color: '#2d1d12',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '26px',
-      fontStyle: 'bold',
-    });
-    overlay.add([shade, panel, title]);
-
-    units.slice(0, 4).forEach((unit, index) => {
-      const x = 34 + (index % 2) * 150;
-      const y = 86 + Math.floor(index / 2) * 132;
-      const card = this.add.image(x + 54, y + 54, 'card-reward').setDisplaySize(112, 164);
-      const icon = this.add.image(x + 54, y + 34, `unit-${unit.id}`).setDisplaySize(52, 52);
-      const name = this.add.text(x + 18, y + 70, unit.name, {
-        color: '#2d2115',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '14px',
-        fontStyle: 'bold',
-      });
-      const role = this.add.text(x + 18, y + 92, `${unit.role} · ${unit.skillName}`, {
-        color: '#6b4f31',
-        fontFamily: 'Microsoft YaHei',
-        fontSize: '10px',
-        wordWrap: { width: 72 },
-      });
-      overlay.add([card, icon, name, role]);
+    // 三主角群像
+    const heroes: Array<{ key: string; name: string }> = [
+      { key: 'unit-asu', name: '阿苏勒' },
+      { key: 'unit-jiye', name: '姬野' },
+      { key: 'unit-yuran', name: '羽然' },
+    ];
+    heroes.forEach((hero, index) => {
+      const x = 98 + index * 97;
+      this.add.image(x, 512, 'frame-ally').setDisplaySize(96, 96).setAlpha(0.9);
+      this.add.image(x, 512, hero.key).setDisplaySize(78, 78);
+      inkText(this, x, 574, hero.name, { size: FONT_SIZE.small, bold: true });
     });
 
-    const close = this.add.text(264, 28, '关闭', {
-      color: '#915b32',
-      fontFamily: 'Microsoft YaHei',
-      fontSize: '18px',
+    makeInkButton(this, {
+      x: 195,
+      y: 690,
+      width: 200,
+      height: 64,
+      label: '开始',
+      onTap: () => this.scene.start('JiuzhouBattleScene', { freshRun: true }),
     });
-    close.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      this.overlay?.destroy(true);
-      this.overlay = undefined;
+
+    inkText(this, 195, 780, '南淮城里的三个少年，还不知道命运的名字', {
+      size: FONT_SIZE.tiny,
+      color: THEME.inkLight,
     });
-    overlay.add(close);
-    this.overlay = overlay;
+
+    this.cameras.main.fadeIn(260, 24, 22, 18);
   }
 }

@@ -41,7 +41,7 @@ function toVisualChoice(choice: RewardChoice): RewardVisualChoice {
     const totem = getTotemDefinitionOrThrow(choice.id);
     return {
       ...choice,
-      artKey: `totem-${choice.id}`,
+      artKey: 'ink-bloom',
       chipText: totem.name,
       theme: 'totem',
     };
@@ -49,7 +49,7 @@ function toVisualChoice(choice: RewardChoice): RewardVisualChoice {
 
   return {
     ...choice,
-    artKey: 'button-lacquer',
+    artKey: 'ink-slash',
     chipText: '军资',
     theme: 'economy',
   };

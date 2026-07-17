@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "artgen": "node tools/artgen/generate.cjs"
   },
   "dependencies": {
     "phaser": "^3.90.0"

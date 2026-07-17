@@ -9,12 +9,12 @@ export const initialRunState: RunState = {
   usedPopulation: 0,
   waveNumber: 1,
   bench: [
-    createBenchUnit('axe-warrior'),
-    createBenchUnit('frost-shaman'),
-    createBenchUnit('wolf-rider'),
+    createBenchUnit('jiye'),
+    createBenchUnit('asu'),
+    createBenchUnit('xiyan'),
   ],
   boardSlots: createBoardSlots(3),
-  unlockedUnitIds: ['axe-warrior', 'frost-shaman', 'wolf-rider'],
+  unlockedUnitIds: ['jiye', 'asu', 'xiyan'],
   ownedTotemIds: [],
 };
 
