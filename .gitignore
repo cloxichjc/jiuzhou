@@ -6,3 +6,9 @@ build/
 .codex
 九州·缥缈录.txt
 九州缥缈录.epub
+
+# Cocos Creator caches（settings/ 是项目配置，需要入库）
+library/
+temp/
+profiles/
+local/

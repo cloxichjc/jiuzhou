@@ -3,53 +3,67 @@ import { appRouter } from '../app/AppRouter';
 import { clearStage, getAppState, setAppState } from '../app/AppState';
 import { createInitialBattleState, tickBattle } from '../battle/BattleReducer';
 import { applyHeroSkill } from '../battle/SkillResolver';
-import type { BattleUnit } from '../battle/BattleTypes';
-import { getStageById, loadHeroes } from '../data/loadConfig';
+import type { BattleEvent, BattleUnitInput } from '../battle/BattleTypes';
+import { getEnemyById, getHeroById, getStageById, loadHeroes } from '../data/loadConfig';
 
 const { ccclass } = _decorator;
 
-const heroSkillLabels: Record<string, string> = {
-  wolfBlessing: '苍狼祝祷',
-  tigerCharge: '虎牙破阵',
-  featherBounce: '风羽回旋'
+/** 主角在我方 3x2 棋盘的固定站位（后排左/前排中/后排右）。 */
+const heroSlots: Record<string, number> = {
+  asu: 3,
+  jiye: 1,
+  yuran: 5
 };
 
 export interface BattleUnitView {
   id: string;
+  name: string;
   hp: number;
+  maxHp: number;
   slot: number;
   alive: boolean;
+  /** 苍狼祝祷减伤生效中 */
+  warded: boolean;
+  /** 风羽回旋减速生效中 */
+  slowed: boolean;
 }
 
-function buildAllies(heroIds: string[]): BattleUnit[] {
-  const base: Record<string, BattleUnit> = {
-    asu: { id: 'asu', hp: 100, attack: 10, slot: 0 },
-    jiye: { id: 'jiye', hp: 120, attack: 18, slot: 1 },
-    yuran: { id: 'yuran', hp: 80, attack: 14, slot: 2 }
-  };
+function buildAllies(heroIds: string[]): BattleUnitInput[] {
+  const heroes = loadHeroes();
 
-  return heroIds.map((id) => ({ ...base[id] })).filter(Boolean);
+  return heroIds
+    .map((id) => heroes.find((hero) => hero.id === id))
+    .filter((hero): hero is NonNullable<typeof hero> => Boolean(hero))
+    .map((hero) => ({
+      id: hero.id,
+      hp: hero.hp,
+      attack: hero.attack,
+      attackIntervalMs: hero.attackIntervalMs,
+      slot: heroSlots[hero.id] ?? 0
+    }));
 }
 
-function buildEnemies(stageId: string, waveIndex: number): BattleUnit[] {
-  const stage = getStageById(stageId);
-  const wave = stage?.waves[waveIndex];
+function buildEnemies(stageId: string, waveIndex: number): BattleUnitInput[] {
+  const wave = getStageById(stageId)?.waves[waveIndex];
   if (!wave) {
     return [];
   }
 
-  const stats: Record<string, Omit<BattleUnit, 'slot'>> = {
-    'bandit-melee': { id: 'bandit-melee', hp: 45, attack: 6 },
-    'bandit-ranged': { id: 'bandit-ranged', hp: 30, attack: 8 },
-    'bandit-shield': { id: 'bandit-shield', hp: 60, attack: 4 },
-    'elite-guard': { id: 'elite-guard', hp: 70, attack: 10 },
-    captain: { id: 'captain', hp: 110, attack: 14 }
-  };
-
-  return wave.enemies.map((enemy) => ({
-    ...stats[enemy.unitId],
-    slot: enemy.slot
-  }));
+  return wave.enemies
+    .map((enemy) => {
+      const config = getEnemyById(enemy.unitId);
+      if (!config) {
+        return null;
+      }
+      return {
+        id: config.id,
+        hp: config.hp,
+        attack: config.attack,
+        attackIntervalMs: config.attackIntervalMs,
+        slot: enemy.slot
+      };
+    })
+    .filter((unit): unit is BattleUnitInput => Boolean(unit));
 }
 
 @ccclass('BattleController')
@@ -59,16 +73,17 @@ export class BattleController extends Component {
   waveIndex = 0;
   currentStageId = appRouter.payload.stageId ?? 'stage-1';
   selectedSkillId = 'wolfBlessing';
+  selectedHeroId = 'asu';
+  private pendingEvents: BattleEvent[] = [];
 
   onLoad(): void {
     const save = getAppState().save;
-    const selectedHeroId = save.selectedHeroId ?? 'asu';
-    const heroIds = Array.from(new Set([selectedHeroId, ...save.unlockedHeroIds]));
+    this.selectedHeroId = save.selectedHeroId ?? 'asu';
+    const heroIds = Array.from(new Set([this.selectedHeroId, ...save.unlockedHeroIds]));
     const allies = buildAllies(heroIds);
     const enemies = buildEnemies(this.currentStageId, this.waveIndex);
-    const hero = loadHeroes().find((item) => item.id === selectedHeroId);
 
-    this.selectedSkillId = hero?.skillId ?? 'wolfBlessing';
+    this.selectedSkillId = getHeroById(this.selectedHeroId)?.skillId ?? 'wolfBlessing';
     this.battleState = createInitialBattleState({ allies, enemies });
   }
 
@@ -81,7 +96,7 @@ export class BattleController extends Component {
   }
 
   getSkillLabel(): string {
-    return heroSkillLabels[this.selectedSkillId] ?? '英雄技能';
+    return getHeroById(this.selectedHeroId)?.skillName ?? '英雄技能';
   }
 
   canUseSkill(): boolean {
@@ -94,22 +109,40 @@ export class BattleController extends Component {
     return `第 ${this.waveIndex + 1} / ${total} 波`;
   }
 
-  getAlliesView(): BattleUnitView[] {
-    return this.battleState.allies.map((unit) => ({
+  private toView(units: typeof this.battleState.allies, names: Record<string, string>): BattleUnitView[] {
+    return units.map((unit) => ({
       id: unit.id,
-      hp: unit.hp,
+      name: names[unit.id] ?? unit.id,
+      hp: Math.max(0, unit.hp),
+      maxHp: unit.maxHp,
       slot: unit.slot,
-      alive: unit.hp > 0
+      alive: unit.hp > 0,
+      warded: (unit.damageReductionUntilMs ?? 0) > this.battleState.elapsedMs,
+      slowed: (unit.slowedUntilMs ?? 0) > this.battleState.elapsedMs
     }));
   }
 
+  getAlliesView(): BattleUnitView[] {
+    const names = Object.fromEntries(loadHeroes().map((hero) => [hero.id, hero.name]));
+    return this.toView(this.battleState.allies, names);
+  }
+
   getEnemiesView(): BattleUnitView[] {
-    return this.battleState.enemies.map((unit) => ({
-      id: unit.id,
-      hp: unit.hp,
-      slot: unit.slot,
-      alive: unit.hp > 0
-    }));
+    const stage = getStageById(this.currentStageId);
+    const names: Record<string, string> = {};
+    for (const wave of stage?.waves ?? []) {
+      for (const enemy of wave.enemies) {
+        names[enemy.unitId] = getEnemyById(enemy.unitId)?.name ?? enemy.unitId;
+      }
+    }
+    return this.toView(this.battleState.enemies, names);
+  }
+
+  /** 取走自上次调用以来累积的战斗事件（表现层消费）。 */
+  consumeEvents(): BattleEvent[] {
+    const events = this.pendingEvents;
+    this.pendingEvents = [];
+    return events;
   }
 
   update(deltaTime: number): void {
@@ -137,12 +170,16 @@ export class BattleController extends Component {
       return;
     }
 
-    this.battleState = tickBattle(this.battleState, deltaTime * 1000);
+    const { state, events } = tickBattle(this.battleState, deltaTime * 1000);
+    this.battleState = state;
+    this.pendingEvents.push(...events);
   }
 
   useSkill(): void {
     if (this.skillUsed) return;
-    this.battleState = applyHeroSkill(this.selectedSkillId, this.battleState);
+    const { state, events } = applyHeroSkill(this.selectedSkillId, this.battleState, this.selectedHeroId);
+    this.battleState = state;
+    this.pendingEvents.push(...events);
     this.skillUsed = true;
   }
 }

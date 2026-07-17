@@ -13,18 +13,6 @@ export interface HeroCardView {
   selected: boolean;
 }
 
-const heroSummaries: Record<string, string> = {
-  asu: '隐忍的北陆世子，偏向团队防守。',
-  jiye: '锋利的少年武士，偏向正面突击。',
-  yuran: '灵动的羽族少女，偏向机动压制。'
-};
-
-const heroSkillNames: Record<string, string> = {
-  asu: '苍狼祝祷',
-  jiye: '虎牙破阵',
-  yuran: '风羽回旋'
-};
-
 @ccclass('HeroSelectController')
 export class HeroSelectController extends Component {
   getHeroCards(): HeroCardView[] {
@@ -33,8 +21,8 @@ export class HeroSelectController extends Component {
     return loadHeroes().map((hero) => ({
       id: hero.id,
       name: hero.name,
-      summary: heroSummaries[hero.id],
-      skillName: heroSkillNames[hero.id],
+      summary: hero.summary,
+      skillName: hero.skillName,
       selected: save.selectedHeroId === hero.id
     }));
   }

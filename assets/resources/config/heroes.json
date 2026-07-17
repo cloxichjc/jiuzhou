@@ -1,5 +1,41 @@
 [
-  { "id": "asu", "name": "阿苏勒", "role": "support", "faction": "north", "skillId": "wolfBlessing" },
-  { "id": "jiye", "name": "姬野", "role": "fighter", "faction": "east", "skillId": "tigerCharge" },
-  { "id": "yuran", "name": "羽然", "role": "skirmisher", "faction": "east", "skillId": "featherBounce" }
+  {
+    "id": "asu",
+    "name": "阿苏勒",
+    "role": "support",
+    "faction": "north",
+    "skillId": "wolfBlessing",
+    "skillName": "苍狼祝祷",
+    "summary": "隐忍的北陆世子，偏向团队防守。",
+    "skillSummary": "8 秒内全队伤害减免提升 20%",
+    "hp": 110,
+    "attack": 9,
+    "attackIntervalMs": 1500
+  },
+  {
+    "id": "jiye",
+    "name": "姬野",
+    "role": "fighter",
+    "faction": "east",
+    "skillId": "tigerCharge",
+    "skillName": "虎牙破阵",
+    "summary": "锋利的少年武士，偏向正面突击。",
+    "skillSummary": "突进并对全体敌人造成 25 点范围伤害",
+    "hp": 135,
+    "attack": 16,
+    "attackIntervalMs": 1200
+  },
+  {
+    "id": "yuran",
+    "name": "羽然",
+    "role": "skirmisher",
+    "faction": "east",
+    "skillId": "featherBounce",
+    "skillName": "风羽回旋",
+    "summary": "灵动的羽族少女，偏向机动压制。",
+    "skillSummary": "弹射至多 3 名敌人各 12 点伤害并减速 2 秒",
+    "hp": 85,
+    "attack": 13,
+    "attackIntervalMs": 800
+  }
 ]

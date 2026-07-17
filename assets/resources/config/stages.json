@@ -20,14 +20,31 @@
     "storyBefore": "街巷里的混乱逼着你们第一次配合。",
     "storyAfter": "你开始明白，信任不是说出来的。",
     "unlockHeroId": "yuran",
-    "waves": [{ "id": "wave-1", "enemies": [{ "unitId": "bandit-shield", "slot": 1 }] }]
+    "waves": [
+      {
+        "id": "wave-1",
+        "enemies": [
+          { "unitId": "bandit-melee", "slot": 0 },
+          { "unitId": "bandit-shield", "slot": 1 }
+        ]
+      }
+    ]
   },
   {
     "id": "stage-4",
     "title": "并肩破敌",
     "storyBefore": "三人终于同场，命运第一次变得清晰。",
     "storyAfter": "羁绊开始成形。",
-    "waves": [{ "id": "wave-1", "enemies": [{ "unitId": "elite-guard", "slot": 0 }] }]
+    "waves": [
+      {
+        "id": "wave-1",
+        "enemies": [
+          { "unitId": "elite-guard", "slot": 0 },
+          { "unitId": "bandit-shield", "slot": 1 },
+          { "unitId": "bandit-ranged", "slot": 2 }
+        ]
+      }
+    ]
   },
   {
     "id": "stage-5",
